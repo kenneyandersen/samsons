@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1030">
+  <title>Samsons julekamp</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="stage">
+    <canvas id="canvas" width="540" height="800" aria-label="Spillet Samsons julekamp"></canvas>
+
+    <button id="bomb" type="button" tabindex="-1" hidden>Bombe</button>
+    <button id="mute" type="button" aria-label="Slå lyd til eller fra">Lyd: til</button>
+
+    <section id="overlay">
+      <div class="panel">
+        <h1 id="overlay-title"></h1>
+        <p id="overlay-body"></p>
+        <p id="overlay-help" class="help">
+          <b>Flyt:</b> piletaster, WASD eller træk med mus/finger<br>
+          <b>Præcis styring:</b> hold Shift<br>
+          <b>Bombe:</b> mellemrum, B eller knappen<br>
+          <b>Saml op:</b> ⭐ stærkere kanon, 🛡️ skjold, ♥ liv<br>
+          <b>Pause:</b> Esc eller P<br>
+          Du skyder af dig selv, og kun den lyse prik på nissen kan rammes.
+        </p>
+        <div id="overlay-gifts" class="gifts" hidden></div>
+        <button id="overlay-button" type="button"></button>
+        <p id="overlay-stats" class="stats"></p>
+      </div>
+    </section>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>

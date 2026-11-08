@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "serve",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/serve.ps1"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "serve",
+        "pattern": {
+          "regexp": "^$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^Starting server",
+          "endsPattern": "^Serving "
+        }
+      }
+    },
+    {
+      "label": "stop server",
+      "type": "shell",
+      "command": "echo ${input:terminateServer}",
+      "presentation": {
+        "reveal": "never"
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "terminateServer",
+      "type": "command",
+      "command": "workbench.action.tasks.terminate",
+      "args": "serve"
+    }
+  ]
+}

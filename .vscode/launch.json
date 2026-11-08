@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Spil i Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8080/",
+      "webRoot": "${workspaceFolder}/public",
+      "preLaunchTask": "serve",
+      "postDebugTask": "stop server"
+    }
+  ]
+}
