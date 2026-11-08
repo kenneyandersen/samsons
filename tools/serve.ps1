@@ -4,7 +4,7 @@
 
 param(
     [int]$Port = 8080,
-    [string]$Root = (Join-Path $PSScriptRoot '..\public')
+    [string]$Root = (Join-Path $PSScriptRoot '..\docs')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,7 +46,7 @@ function Send-File($context) {
     $relative = [Uri]::UnescapeDataString($context.Request.Url.AbsolutePath).TrimStart('/')
     $path = [IO.Path]::GetFullPath([IO.Path]::Combine($Root, $relative))
 
-    # Refuse anything that resolves outside the public folder.
+    # Refuse anything that resolves outside the docs folder.
     $insideRoot = $path.Equals($Root, [StringComparison]::OrdinalIgnoreCase) -or
         $path.StartsWith("$Root\", [StringComparison]::OrdinalIgnoreCase)
     if (-not $insideRoot) {
