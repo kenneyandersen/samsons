@@ -53,7 +53,9 @@ const SHOT_RADIUS = 5.5;
 const SHOT_RADIUS_BIG = 12;
 const SANTA_HIT_RADIUS = 62;
 
-const BULLET_RADIUS = { coal: 7, candy: 7, present: 11, ornament: 10, reindeer: 22 };
+const BULLET_RADIUS = { coal: 7, candy: 7, present: 11, ornament: 10, reindeer: 16 };
+const SHOOTABLE_BULLETS = new Set(["present", "ornament"]);
+const REINDEER_SPEED = 640;
 const BULLET_SPIN = { candy: 7, present: 2.5, ornament: 0, coal: 0, reindeer: 0 };
 
 // Bane 2: de sure gaver.
@@ -96,7 +98,11 @@ const HOTEL_ROWS = HOTEL_MAP.length;
 const HOTEL_PLAYER_RADIUS = 12;
 const HOTEL_CATCH_DISTANCE = 42;
 const HOTEL_CATCHES = 3;
-const HOTEL_SANTA_SPEED = [190, 215, 240];
+const HOTEL_SANTA_SPEED = [150, 170, 190];
+const HOTEL_PILE_MELT_TIME = 5;
+const HOTEL_PILE_COOLDOWN = 3;
+const HOTEL_MAX_PILES = 3;
+const HOTEL_PILE_TRAP_DISTANCE = 14;
 const HOTEL_CHASER_SPEED = 95;
 const HOTEL_MAX_CHASERS = 2;
 const HOTEL_COAL_EVERY = 3;
@@ -203,10 +209,9 @@ function* phaseCandy() {
 
 function* phaseReindeer() {
   while (true) {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       warnReindeer(game.player.y + rand(-30, 30), i % 2 ? 1 : -1);
-      fan(aim(), 3, 0.3, 250, "coal");
-      yield 0.75;
+      yield 1.1;
     }
     yield 0.6;
     for (let i = 0; i < 2; i++) {
@@ -379,6 +384,7 @@ function newGame(stage = 1) {
     gifts: [],
     waveIndex: 0,
     chasers: [],
+    piles: [],
     catches: 0,
     coalTime: HOTEL_COAL_EVERY,
     taunt: null,
@@ -748,7 +754,7 @@ function updateShots(dt) {
   for (const shot of game.shots) {
     shot.x += shot.vx * dt;
     shot.y += shot.vy * dt;
-    if (shot.y < -20) {
+    if (shot.y < -20 || shootDownBullet(shot)) {
       continue;
     }
     if (Math.hypot(shot.x - santa.x, shot.y - (santa.y - 12)) < SANTA_HIT_RADIUS) {
@@ -764,6 +770,19 @@ function updateShots(dt) {
     remaining.push(shot);
   }
   game.shots = remaining;
+}
+
+// Pakker og julekugler kan skydes ned, før de eksploderer.
+function shootDownBullet(shot) {
+  const index = game.bullets.findIndex((bullet) =>
+    SHOOTABLE_BULLETS.has(bullet.kind) && Math.hypot(shot.x - bullet.x, shot.y - bullet.y) < bullet.r + shot.r);
+  if (index === -1) {
+    return false;
+  }
+  const [target] = game.bullets.splice(index, 1);
+  burstParticles(target.x, target.y, 14, "#ffd27a", 200);
+  sfx.pop();
+  return true;
 }
 
 function damageSanta(damage) {
@@ -799,7 +818,7 @@ function updateWarnings(dt) {
       return true;
     }
     const startX = warning.direction > 0 ? -80 : W + 80;
-    spawn("reindeer", startX, warning.y, warning.direction * 1050, 0, { dropTime: 0, facing: warning.direction });
+    spawn("reindeer", startX, warning.y, warning.direction * REINDEER_SPEED, 0, { facing: warning.direction });
     sfx.reindeer();
     return false;
   });
@@ -818,14 +837,6 @@ function updateBullets(dt) {
       const slow = Math.max(0, 1 - bullet.drag * dt);
       bullet.vx *= slow;
       bullet.vy *= slow;
-    }
-
-    if (bullet.kind === "reindeer" && bullet.x > 0 && bullet.x < W) {
-      bullet.dropTime -= dt;
-      if (bullet.dropTime <= 0) {
-        bullet.dropTime = 0.16;
-        spawn("coal", bullet.x, bullet.y, 0, Math.random() < 0.5 ? -135 : 135);
-      }
     }
 
     if (bullet.fuse !== undefined && (bullet.fuse -= dt) <= 0) {
@@ -1219,6 +1230,54 @@ function setupHotel() {
     addChaser(1, 9);
   }
   say("Du fanger mig aldrig!", 2);
+  game.notice = { text: "Læg en snebunke i hans vej!", time: 3.5 };
+}
+
+function placeSnowPile() {
+  if (game.mode !== "playing" || game.stage !== 3 || game.bombCooldown > 0) {
+    return;
+  }
+  const col = tileCol(game.player.x);
+  const row = tileRow(game.player.y);
+  if (game.piles.some((pile) => pile.col === col && pile.row === row)) {
+    return;
+  }
+  if (game.piles.length >= HOTEL_MAX_PILES) {
+    const oldest = game.piles.findIndex((pile) => pile.melt <= 0);
+    if (oldest === -1) {
+      return;
+    }
+    game.piles.splice(oldest, 1);
+  }
+  game.piles.push({ col, row, x: tileCenterX(col), y: tileCenterY(row), melt: 0 });
+  game.bombCooldown = HOTEL_PILE_COOLDOWN;
+  burstParticles(tileCenterX(col), tileCenterY(row), 14, "#ffffff", 140);
+  sfx.pop();
+}
+
+function moveHotelSanta(dt) {
+  const santa = game.santa;
+  const trap = game.piles.find((pile) => pile.melt > 0);
+  if (trap) {
+    trap.melt -= dt;
+    if (trap.melt <= 0) {
+      game.piles.splice(game.piles.indexOf(trap), 1);
+      burstParticles(trap.x, trap.y, 12, "#bfe6ff", 120);
+    }
+    return;
+  }
+
+  walkGrid(santa, HOTEL_SANTA_SPEED[game.catches], dt, fleeStep);
+  const pile = game.piles.find((candidate) =>
+    Math.hypot(candidate.x - santa.x, candidate.y - santa.y) < HOTEL_PILE_TRAP_DISTANCE);
+  if (pile) {
+    pile.melt = HOTEL_PILE_MELT_TIME;
+    santa.x = pile.x;
+    santa.y = pile.y;
+    burstParticles(pile.x, pile.y, 20, "#ffffff", 200);
+    say("Hjælp! Jeg sidder fast!", 2);
+    sfx.hit();
+  }
 }
 
 function dropHotelPickup() {
@@ -1320,10 +1379,13 @@ function updateHotel(dt) {
 
   const santa = game.santa;
   const player = game.player;
+  game.bombCooldown = Math.max(0, game.bombCooldown - dt);
   updatePlayer(dt);
-  walkGrid(santa, HOTEL_SANTA_SPEED[game.catches], dt, fleeStep);
+  moveHotelSanta(dt);
 
-  game.coalTime -= dt;
+  if (!game.piles.some((pile) => pile.melt > 0)) {
+    game.coalTime -= dt;
+  }
   if (game.coalTime <= 0) {
     game.coalTime = HOTEL_COAL_EVERY;
     spawn("coal", santa.x, santa.y, 0, 0, { fuse: HOTEL_COAL_LIFETIME });
@@ -1384,6 +1446,7 @@ function updateHotelShots(dt) {
 function catchSanta() {
   game.catches += 1;
   progress.catches = game.catches;
+  game.piles = [];
   game.shots = [];
   game.bullets = [];
   game.shake = 10;
@@ -1561,13 +1624,21 @@ window.addEventListener("keydown", (event) => {
   } else if (event.code === "KeyM") {
     toggleMute();
   } else if (event.code === "Space" || event.code === "KeyB") {
-    useBomb();
+    useAction();
   }
 });
 
+function useAction() {
+  if (game.stage === 3) {
+    placeSnowPile();
+  } else {
+    useBomb();
+  }
+}
+
 bombButton.addEventListener("pointerdown", (event) => {
   event.preventDefault();
-  useBomb();
+  useAction();
 });
 
 window.addEventListener("keyup", (event) => keys.delete(event.code));
@@ -2261,7 +2332,7 @@ function drawWarnings() {
   for (const warning of game.warnings) {
     const pulse = 0.2 + 0.2 * Math.abs(Math.sin(warning.time * 16));
     ctx.fillStyle = `rgba(255,40,50,${pulse})`;
-    ctx.fillRect(0, warning.y - 26, W, 52);
+    ctx.fillRect(0, warning.y - 22, W, 44);
     ctx.fillStyle = "#ffdf3e";
     ctx.font = "900 34px system-ui, sans-serif";
     ctx.textAlign = "center";
@@ -2312,6 +2383,23 @@ function drawGift(gift) {
     ctx.fillRect(gift.x - 62, gift.y - 92, 124, 10);
     ctx.fillStyle = "#e0222f";
     ctx.fillRect(gift.x - 60, gift.y - 90, 120 * (gift.hp / GIFT_TYPES.giant.hp), 6);
+  }
+}
+
+function drawSnowPile(pile) {
+  const size = pile.melt > 0 ? 0.35 + 0.65 * (pile.melt / HOTEL_PILE_MELT_TIME) : 1;
+  ctx.fillStyle = "#cfe3f5";
+  ellipse(pile.x, pile.y + 12, 25 * size, 11 * size);
+  ctx.fillStyle = "#ffffff";
+  ellipse(pile.x - 8 * size, pile.y + 7, 14 * size, 11 * size);
+  ellipse(pile.x + 9 * size, pile.y + 8, 13 * size, 10 * size);
+  ellipse(pile.x, pile.y + 1, 12 * size, 11 * size);
+
+  if (pile.melt > 0) {
+    ctx.fillStyle = "rgba(5,7,26,0.75)";
+    ctx.fillRect(pile.x - 20, pile.y - 34, 40, 7);
+    ctx.fillStyle = "#bfe6ff";
+    ctx.fillRect(pile.x - 19, pile.y - 33, 38 * (pile.melt / HOTEL_PILE_MELT_TIME), 5);
   }
 }
 
@@ -2449,6 +2537,7 @@ function render() {
     for (const shot of game.shots) {
       circle(shot.x, shot.y, shot.r);
     }
+    game.piles.forEach(drawSnowPile);
     game.gifts.forEach(drawGift);
     game.chasers.forEach(drawGift);
     game.pickups.forEach(drawPickup);
@@ -2491,11 +2580,12 @@ let accumulator = 0;
 let bombLabel = "";
 
 function updateBombButton() {
-  const visible = game.mode === "playing" && game.stage !== 3;
+  const visible = game.mode === "playing";
   if (bombButton.hidden === visible) {
     bombButton.hidden = !visible;
   }
-  const label = game.bombCooldown > 0 ? `Bombe ${Math.ceil(game.bombCooldown)}` : "Bombe";
+  const name = game.stage === 3 ? "Snebunke" : "Bombe";
+  const label = game.bombCooldown > 0 ? `${name} ${Math.ceil(game.bombCooldown)}` : name;
   if (label !== bombLabel) {
     bombLabel = label;
     bombButton.textContent = label;
