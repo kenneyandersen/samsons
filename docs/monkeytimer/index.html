@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monkey Timer</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #f7f7f7;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #gameCanvas {
+            border-bottom: 5px solid #22c55e; /* Grøn kant i bunden */
+            background-color: #bae6fd; /* Flot blå himmel */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border-radius: 4px;
+            /* Skalér ned, så spillet passer på en telefon, også på tværs. */
+            width: min(calc(100vw - 16px), 800px, calc((100vh - 150px) * 8 / 3));
+            width: min(calc(100vw - 16px), 800px, calc((100dvh - 150px) * 8 / 3));
+            height: auto;
+        }
+        #uiContainer {
+            display: flex;
+            gap: 20px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 20px;
+            border-radius: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .back {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 200px;
+            min-height: 52px;
+            padding: 10px 18px;
+            box-sizing: border-box;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #333;
+            font-size: 18px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="uiContainer">
+        <div>Point: <span id="score">0</span></div>
+        <div>Bedste: <span id="highScore">0</span></div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="300"></canvas>
+    <a class="back" href="../">Tilbage til alle spil</a>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let score = 0;
+let highScore = 0;
+let gameOver = false;
+let gameSpeed = 5.5;
+
+// Jorden er placeret ved 240px på skærmen
+const groundY = 240; 
+
+let bossActive = false;
+let bossX = 850;
+let bossY = groundY - 80; // Bossen står på jorden
+
+const monkey = {
+    x: 75,
+    y: groundY - 40, // Start på jorden
+    width: 40,
+    height: 40,
+    gravity: 0.6,
+    velocity: 0,
+    jumpForce: -13,
+    isGrounded: true
+};
+
+let obstacles = [];
+let bananas = [];
+let clouds = [];
+let spawnTimer = 0;
+
+window.addEventListener("keydown", (e) => {
+    if ((e.code === "Space" || e.code === "ArrowUp") && monkey.isGrounded && !gameOver) {
+        monkey.velocity = monkey.jumpForce;
+        monkey.isGrounded = false;
+    }
+    if (e.code === "Space" && gameOver) {
+        resetGame();
+    }
+});
+
+// Hele skærmen er hop-knap på en telefon, undtagen tilbage-knappen.
+document.addEventListener("touchstart", (e) => {
+    if (e.target.closest("a")) {
+        return;
+    }
+    if (monkey.isGrounded && !gameOver) {
+        monkey.velocity = monkey.jumpForce;
+        monkey.isGrounded = false;
+    }
+    if (gameOver) {
+        resetGame();
+    }
+});
+
+function spawnObjects() {
+    if (score >= 50 && !bossActive) {
+        bossActive = true;
+        bossX = canvas.width + 50;
+    }
+
+    let minGap = bossActive ? 60 : 80;
+    let maxGap = bossActive ? 120 : 150;
+    let timeToSpawn = Math.floor(Math.random() * (maxGap - minGap)) + minGap;
+
+    if (spawnTimer > timeToSpawn) {
+        if (bossActive) {
+            // Bossen ruller ildkugler langs jorden
+            obstacles.push({
+                x: bossX - 10,
+                y: groundY - 30,
+                width: 30,
+                height: 30,
+                type: "fire"
+            });
+        } else {
+            // Huse står på jorden
+            obstacles.push({
+                x: canvas.width,
+                y: groundY - 35,
+                width: 35,
+                height: 35,
+                type: "house"
+            });
+        }
+
+        if (Math.random() > 0.4) {
+            bananas.push({
+                x: canvas.width + Math.floor(Math.random() * 40),
+                y: groundY - 140 - Math.floor(Math.random() * 50), // Bananer svæver stadig højt
+                width: 25,
+                height: 25
+            });
+        }
+        spawnTimer = 0;
+    }
+    spawnTimer++;
+
+    if (Math.random() < 0.006 && clouds.length < 6) {
+        clouds.push({
+            x: canvas.width,
+            y: 15 + Math.random() * 65,
+            speed: 0.4 + Math.random() * 0.8
+        });
+    }
+}
+
+function resetGame() {
+    score = 0;
+    gameOver = false;
+    gameSpeed = 5.5;
+    bossActive = false;
+    bossX = 850;
+    obstacles = [];
+    bananas = [];
+    clouds = [
+        { x: 150, y: 30, speed: 0.6 },
+        { x: 450, y: 60, speed: 0.4 },
+        { x: 700, y: 40, speed: 0.7 }
+    ];
+    monkey.y = groundY - 40;
+    monkey.velocity = 0;
+    monkey.isGrounded = true;
+    document.getElementById("score").innerText = score;
+    requestAnimationFrame(update);
+}
+
+// Spillet flytter alt én gang pr. billede, så det må højst køre 60 gange i sekundet,
+// ellers kører det dobbelt så hurtigt på telefoner med 120 Hz-skærm.
+let lastStep = 0;
+
+function update(now) {
+    if (now - lastStep < 1000 / 61) {
+        requestAnimationFrame(update);
+        return;
+    }
+    lastStep = now;
+
+    if (gameOver) {
+        if (score > highScore) {
+            highScore = score;
+            document.getElementById("highScore").innerText = highScore;
+        }
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.font = "bold 32px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Game Over! 🍌", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = "20px Arial";
+        ctx.fillText("Tryk på mellemrum eller skærmen for at spille igen", canvas.width / 2, canvas.height / 2 + 25);
+        ctx.textAlign = "left";
+        return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Skyer
+    ctx.font = "32px Arial";
+    for (let i = clouds.length - 1; i >= 0; i--) {
+        let cloud = clouds[i];
+        cloud.x -= cloud.speed;
+        ctx.fillText("☁️", cloud.x, cloud.y);
+        if (cloud.x < -60) clouds.splice(i, 1);
+    }
+
+    // TEGN JORDEN (Grønt græs)
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+    // Boss logik
+    if (bossActive) {
+        if (bossX > canvas.width - 120) {
+            bossX -= 2;
+        }
+        
+        ctx.font = "80px Arial";
+        ctx.fillText("🦍", bossX, bossY + 75);
+
+        if (bossX > canvas.width - 200) {
+            ctx.fillStyle = "#ff4444";
+            ctx.font = "bold 40px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("BOSS FIGHT!", canvas.width / 2, canvas.height / 2);
+            ctx.textAlign = "left";
+        }
+    }
+
+    // Abe fysik
+    monkey.velocity += monkey.gravity;
+    monkey.y += monkey.velocity;
+
+    // Tjek landing på jorden
+    if (monkey.y >= groundY - 40) {
+        monkey.y = groundY - 40;
+        monkey.velocity = 0;
+        monkey.isGrounded = true;
+    }
+
+    ctx.font = "42px Arial";
+    ctx.fillText("🐒", monkey.x, monkey.y + 35);
+
+    spawnObjects();
+
+    // Bananer
+    ctx.font = "26px Arial";
+    for (let i = bananas.length - 1; i >= 0; i--) {
+        let b = bananas[i];
+        b.x -= gameSpeed;
+        ctx.fillText("🍌", b.x, b.y + 20);
+
+        if (
+            monkey.x < b.x + b.width &&
+            monkey.x + monkey.width > b.x &&
+            monkey.y < b.y + b.height &&
+            monkey.y + monkey.height > b.y
+        ) {
+            bananas.splice(i, 1);
+            score += 5;
+            document.getElementById("score").innerText = score;
+            continue;
+        }
+        if (b.x + b.width < 0) bananas.splice(i, 1);
+    }
+
+    // Forhindringer (Huse / Ildkugler)
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.x -= gameSpeed;
+
+        if (obs.type === "fire") {
+            ctx.font = "35px Arial";
+            ctx.fillText("🔥", obs.x, obs.y + 25);
+        } else {
+            ctx.font = "40px Arial";
+            ctx.fillText("🏠", obs.x, obs.y + 32);
+        }
+
+        if (
+            monkey.x < obs.x + obs.width &&
+            monkey.x + monkey.width > obs.x &&
+            monkey.y < obs.y + obs.height &&
+            monkey.y + monkey.height > obs.y
+        ) {
+            gameOver = true;
+        }
+
+        if (obs.x + obs.width < 0) {
+            obstacles.splice(i, 1);
+            score++;
+            document.getElementById("score").innerText = score;
+
+            if (score % 15 === 0 && score < 50) {
+                gameSpeed += 0.7;
+            }
+        }
+    }
+
+    requestAnimationFrame(update);
+}
+
+resetGame();
+</script>
+</body>
+</html>
