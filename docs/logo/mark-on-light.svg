@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="Samsons logo">
+  <defs>
+    <path id="s" d="M 288 98 C 252 66 140 62 128 140 C 118 202 272 190 276 266 C 280 338 158 344 112 300" fill="none"/>
+    <ellipse id="ring" cx="200" cy="200" rx="172" ry="64" fill="none"/>
+    <path id="pad" d="M -32 -12 C -32 -22 -24 -25 -15 -23 L 15 -23 C 24 -25 32 -22 32 -12 L 37 13 C 39 25 27 30 20 21 L 12 10 L -12 10 L -20 21 C -27 30 -39 25 -37 13 Z"/>
+    <clipPath id="front"><rect x="-40" y="200" width="480" height="260"/></clipPath>
+    <g id="padHalo" transform="translate(214 146) rotate(-12)">
+      <use xlink:href="#pad" href="#pad" fill="#000" stroke="#000" stroke-width="7" stroke-linejoin="round"/>
+    </g>
+    <mask id="cutBackRing" maskUnits="userSpaceOnUse" x="-40" y="-40" width="480" height="480">
+      <rect x="-40" y="-40" width="480" height="480" fill="#fff"/>
+      <use xlink:href="#s" href="#s" stroke="#000" stroke-width="72"/>
+      <use xlink:href="#padHalo" href="#padHalo"/>
+    </mask>
+    <mask id="cutS" maskUnits="userSpaceOnUse" x="-40" y="-40" width="480" height="480">
+      <rect x="-40" y="-40" width="480" height="480" fill="#fff"/>
+      <g transform="rotate(-22 200 200)" clip-path="url(#front)">
+        <use xlink:href="#ring" href="#ring" stroke="#000" stroke-width="36"/>
+      </g>
+      <use xlink:href="#padHalo" href="#padHalo"/>
+    </mask>
+    <mask id="cutFrontRing" maskUnits="userSpaceOnUse" x="-40" y="-40" width="480" height="480">
+      <rect x="-40" y="-40" width="480" height="480" fill="#fff"/>
+      <use xlink:href="#padHalo" href="#padHalo"/>
+    </mask>
+    <mask id="padButtons" maskUnits="userSpaceOnUse" x="-60" y="-60" width="120" height="120">
+      <rect x="-60" y="-60" width="120" height="120" fill="#fff"/>
+      <rect x="-24" y="-9" width="14" height="4.5" rx="1.5" fill="#000"/>
+      <rect x="-19.25" y="-13.75" width="4.5" height="14" rx="1.5" fill="#000"/>
+      <circle cx="18" cy="-12" r="3.2" fill="#000"/>
+      <circle cx="18" cy="-1" r="3.2" fill="#000"/>
+      <circle cx="12.5" cy="-6.5" r="3.2" fill="#000"/>
+      <circle cx="23.5" cy="-6.5" r="3.2" fill="#000"/>
+    </mask>
+  </defs>
+  <g mask="url(#cutBackRing)">
+    <g transform="rotate(-22 200 200)"><use xlink:href="#ring" href="#ring" stroke="#9E2717" stroke-width="22"/></g>
+  </g>
+  <g mask="url(#cutS)"><use xlink:href="#s" href="#s" stroke="#E2412B" stroke-width="56"/></g>
+  <g mask="url(#cutFrontRing)">
+    <g transform="rotate(-22 200 200)" clip-path="url(#front)"><use xlink:href="#ring" href="#ring" stroke="#9E2717" stroke-width="22"/></g>
+  </g>
+  <g transform="translate(214 146) rotate(-12)">
+    <use xlink:href="#pad" href="#pad" fill="#E2412B" mask="url(#padButtons)"/>
+  </g>
+</svg>

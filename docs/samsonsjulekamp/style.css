@@ -146,6 +146,25 @@ button {
   text-align: center;
 }
 
+.logo-link {
+  display: block;
+  width: min(46%, 170px);
+  margin: 0 auto 8px;
+}
+
+.logo-link img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Telefon på tværs: start-knappen er vigtigere end logoet. */
+@media (max-height: 480px) {
+  .logo-link {
+    display: none;
+  }
+}
+
 h1 {
   margin: 0 0 10px;
   color: var(--red);

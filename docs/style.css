@@ -31,12 +31,23 @@ body {
   padding: 40px 16px 56px;
 }
 
+.site-header {
+  margin-bottom: 24px;
+}
+
+.site-logo {
+  display: block;
+  width: min(100%, 620px);
+  height: auto;
+  margin-left: -1%;
+}
+
 h1 {
-  margin: 0 0 28px;
-  font-size: clamp(44px, 10vw, 76px);
+  margin: 4px 0 0;
+  font-size: clamp(26px, 5vw, 36px);
   font-weight: 900;
-  line-height: 1;
-  letter-spacing: -0.02em;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .banners {

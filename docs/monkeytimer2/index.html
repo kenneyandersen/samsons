@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#2f80ed">
     <title>Monkey Timer 2</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../logo/favicon-32.png">
+    <link rel="icon" type="image/svg+xml" href="../logo/favicon.svg">
+    <link rel="apple-touch-icon" href="../logo/apple-touch-icon.png">
     <style>
         * { box-sizing: border-box; }
         [hidden] { display: none !important; }
@@ -107,6 +110,10 @@
             background: rgba(6, 12, 30, 0.74);
         }
         .card { width: 100%; max-width: 430px; text-align: center; }
+        .logo-link { display: block; width: min(46%, 170px); margin: 0 auto 8px; }
+        .logo-link img { display: block; width: 100%; height: auto; }
+        /* Telefon på tværs: start-knappen er vigtigere end logoet. */
+        @media (max-height: 480px) { .logo-link { display: none; } }
         .card h1 {
             margin: 0 0 8px;
             font-size: clamp(38px, 10vmin, 56px);
@@ -171,6 +178,7 @@
 
         <section id="overlay">
             <div class="card">
+                <a class="logo-link" href="../"><img src="../logo/header.png" alt="Samsons.dk – alle spil"></a>
                 <h1 id="overlayTitle"></h1>
                 <p id="overlayBody"></p>
                 <div id="howto">

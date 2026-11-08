@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <defs>
+    <clipPath id="front"><rect x="-40" y="200" width="480" height="260"/></clipPath>
+  </defs>
+  <rect width="400" height="400" rx="84" fill="#17121A"/>
+  <g transform="rotate(-22 200 200)">
+    <ellipse cx="200" cy="200" rx="172" ry="64" fill="none" stroke="#FFB4A6" stroke-width="22"/>
+  </g>
+  <path d="M 288 98 C 252 66 140 62 128 140 C 118 202 272 190 276 266 C 280 338 158 344 112 300" fill="none" stroke="#17121A" stroke-width="72"/>
+  <path d="M 288 98 C 252 66 140 62 128 140 C 118 202 272 190 276 266 C 280 338 158 344 112 300" fill="none" stroke="#FF5136" stroke-width="56"/>
+  <g transform="rotate(-22 200 200)" clip-path="url(#front)">
+    <ellipse cx="200" cy="200" rx="172" ry="64" fill="none" stroke="#17121A" stroke-width="36"/>
+    <ellipse cx="200" cy="200" rx="172" ry="64" fill="none" stroke="#FFB4A6" stroke-width="22"/>
+  </g>
+</svg>
