@@ -11,6 +11,7 @@
   <main id="stage">
     <canvas id="canvas" width="540" height="800" aria-label="Spillet Samsons julekamp"></canvas>
 
+    <button id="pause" type="button" tabindex="-1" aria-label="Pause" hidden>II</button>
     <button id="bomb" type="button" tabindex="-1" hidden>Bombe</button>
     <button id="mute" type="button" aria-label="Slå lyd til eller fra">Lyd: til</button>
 
@@ -23,12 +24,13 @@
           <b>Præcis styring:</b> hold Shift<br>
           <b>Bombe og snebunke:</b> mellemrum, B eller knappen<br>
           <b>Saml op:</b> ⭐ stærkere kanon, 🛡️ skjold, ♥ liv<br>
-          <b>Pause:</b> Esc eller P<br>
+          <b>Pause:</b> Esc, P eller knappen øverst<br>
           Du skyder af dig selv, og kun den lyse prik på nissen kan rammes.
         </p>
         <div id="overlay-gifts" class="gifts" hidden></div>
         <button id="overlay-button" type="button"></button>
         <p id="overlay-stats" class="stats"></p>
+        <a class="back" href="../">Tilbage til alle spil</a>
       </div>
     </section>
   </main>

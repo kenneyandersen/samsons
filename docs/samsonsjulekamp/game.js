@@ -1641,6 +1641,12 @@ bombButton.addEventListener("pointerdown", (event) => {
   useAction();
 });
 
+const pauseButton = document.getElementById("pause");
+pauseButton.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  pauseGame();
+});
+
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", pauseGame);
 document.addEventListener("visibilitychange", () => {
@@ -2604,6 +2610,7 @@ function frame(now) {
   lastFrame = now;
   scheduleMusic();
   updateBombButton();
+  pauseButton.hidden = game.mode !== "playing";
   render();
   requestAnimationFrame(frame);
 }
