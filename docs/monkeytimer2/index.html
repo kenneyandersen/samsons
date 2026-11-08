@@ -140,7 +140,7 @@
         }
         .primary { border: 0; background: #fbbf24; color: #1f2937; }
         .primary:disabled { opacity: 0.55; }
-        .back { margin-top: 10px; border: 2px solid rgba(255, 255, 255, 0.6); color: #fff; font-size: 18px; }
+        .back { margin-top: 10px; border: 2px solid rgba(255, 255, 255, 0.6); background: none; color: #fff; font-size: 18px; }
         #best { margin: 12px 0 0; color: #fde047; font-size: 16px; font-weight: 700; }
         button:focus-visible, a:focus-visible { outline: 3px solid #fde047; outline-offset: 2px; }
     </style>
@@ -181,6 +181,7 @@
                     <div style="grid-column: 1 / -1"><b>Træer</b><br>Tryk Hop ved stammen for at klatre op, og hop ned på bossen. Men bliver du for længe, ryster den dig ned!</div>
                 </div>
                 <button id="overlayButton" class="primary" type="button"></button>
+                <button id="mute" class="back" type="button">Lyd: til</button>
                 <a class="back" href="../">Tilbage til alle spil</a>
                 <p id="best"></p>
             </div>
@@ -373,6 +374,202 @@ function saveBest() {
     }
 }
 
+/* ---------- Lyd ---------- */
+
+const MUTED_KEY = "monkey-timer-2-muted";
+const MASTER_VOLUME = 0.8;
+const MUSIC_VOLUME = 0.55;
+const audio = { context: null, master: null, musicBus: null, noise: null, muted: false };
+
+try {
+    audio.muted = localStorage.getItem(MUTED_KEY) === "1";
+} catch {
+    // Uden adgang til lager er lyden bare slået til.
+}
+
+// Browsere tillader først lyd efter et tryk, så den startes fra menuknapperne.
+function initAudio() {
+    if (audio.context) {
+        audio.context.resume();
+        return;
+    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    audio.context = new AudioContextClass();
+    audio.master = audio.context.createGain();
+    audio.master.gain.value = audio.muted ? 0 : MASTER_VOLUME;
+    audio.master.connect(audio.context.destination);
+    audio.musicBus = audio.context.createGain();
+    audio.musicBus.gain.value = MUSIC_VOLUME;
+    audio.musicBus.connect(audio.master);
+
+    const length = audio.context.sampleRate;
+    audio.noise = audio.context.createBuffer(1, length, audio.context.sampleRate);
+    const samples = audio.noise.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+        samples[i] = Math.random() * 2 - 1;
+    }
+}
+
+function tone(frequency, duration, { type = "square", volume = 0.08, slideTo = null, delay = 0, bus = null } = {}) {
+    if (!audio.context) return;
+    const start = audio.context.currentTime + delay;
+    const oscillator = audio.context.createOscillator();
+    const gain = audio.context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (slideTo) {
+        oscillator.frequency.exponentialRampToValueAtTime(slideTo, start + duration);
+    }
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain).connect(bus || audio.master);
+    oscillator.start(start);
+    oscillator.stop(start + duration);
+}
+
+function noise(duration, volume, cutoff, { delay = 0, bus = null, highpass = false } = {}) {
+    if (!audio.context) return;
+    const now = audio.context.currentTime + delay;
+    const source = audio.context.createBufferSource();
+    const filter = audio.context.createBiquadFilter();
+    const gain = audio.context.createGain();
+    source.buffer = audio.noise;
+    filter.type = highpass ? "highpass" : "lowpass";
+    filter.frequency.value = cutoff;
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    source.connect(filter).connect(gain).connect(bus || audio.master);
+    source.start(now, Math.random() * 0.5, duration);
+}
+
+const melody = (notes, step, options) =>
+    notes.forEach((note, i) => tone(note, step * 1.6, { ...options, delay: i * step }));
+
+const sfx = {
+    jump: () => tone(340, 0.16, { type: "square", volume: 0.06, slideTo: 760 }),
+    climb: () => melody([420, 520, 640], 0.06, { type: "triangle", volume: 0.1 }),
+    throwPeel: () => tone(760, 0.15, { type: "triangle", volume: 0.12, slideTo: 260 }),
+    banana: () => melody([880, 1320], 0.06, { type: "triangle", volume: 0.1 }),
+    heart: () => melody([660, 880, 1100], 0.08, { type: "sine", volume: 0.16 }),
+    hurt: () => {
+        noise(0.28, 0.22, 900);
+        tone(320, 0.32, { type: "sawtooth", volume: 0.1, slideTo: 80 });
+    },
+    toss: () => tone(240, 0.12, { type: "triangle", volume: 0.08, slideTo: 440 }),
+    slip: () => tone(1250, 0.55, { type: "sine", volume: 0.16, slideTo: 150 }),
+    stomp: () => {
+        noise(0.14, 0.2, 1400);
+        tone(240, 0.2, { type: "square", volume: 0.13, slideTo: 70 });
+    },
+    roar: () => {
+        noise(0.6, 0.12, 500);
+        tone(130, 0.62, { type: "sawtooth", volume: 0.15, slideTo: 62 });
+    },
+    charge: () => noise(0.5, 0.2, 800),
+    bossHop: () => tone(120, 0.22, { type: "triangle", volume: 0.14, slideTo: 320 }),
+    thud: () => {
+        noise(0.18, 0.24, 350);
+        tone(95, 0.22, { type: "sine", volume: 0.24, slideTo: 42 });
+    },
+    kick: () => tone(330, 0.1, { type: "square", volume: 0.08, slideTo: 170 }),
+    shake: () => noise(0.16, 0.16, 650),
+    boom: () => {
+        noise(0.6, 0.32, 420);
+        tone(80, 0.6, { type: "sawtooth", volume: 0.16, slideTo: 32 });
+    },
+    bossIntro: () => melody([294, 262, 233, 196], 0.14, { type: "sawtooth", volume: 0.09 }),
+    bossDefeated: () => melody([523, 659, 784, 1047], 0.12, { type: "triangle", volume: 0.16 }),
+    levelUp: () => melody([659, 784, 988, 1319], 0.08, { type: "square", volume: 0.07 }),
+    gameOver: () => melody([392, 330, 262, 196], 0.2, { type: "triangle", volume: 0.16 }),
+};
+
+/* ---------- Musik ---------- */
+
+// Mønstre over 32 sekstendedele. "x" er et slag, og tal er midi-toner.
+const LOW_BONGO = "x...x..x..x.x...x...x..x..x.x.x.";
+const HIGH_BONGO = "..x...x...x..xx...x...x...x..xx.";
+const RUN_MARIMBA = [72, 0, 76, 0, 79, 0, 76, 72, 0, 69, 0, 72, 74, 0, 0, 0, 72, 0, 76, 0, 81, 0, 79, 76, 0, 74, 0, 72, 69, 0, 67, 0];
+const BOSS_MARIMBA = [57, 0, 60, 57, 0, 62, 0, 57, 64, 0, 62, 0, 60, 0, 57, 0, 57, 0, 60, 57, 0, 62, 0, 64, 65, 0, 64, 0, 62, 0, 60, 0];
+const RUN_BASS = [48, 48, 43, 48];
+const BOSS_BASS = [45, 45, 41, 43];
+const MONKEY_CALL_EVERY_BARS = 8;
+
+const music = { step: 0, next: 0 };
+const midiFrequency = (note) => 440 * 2 ** ((note - 69) / 12);
+
+function monkeyCall(delay) {
+    const bus = audio.musicBus;
+    [0, 0.17, 0.34].forEach((offset, i) => {
+        tone(430 + i * 90, 0.13, { type: "sawtooth", volume: 0.05, slideTo: 760 + i * 120, delay: delay + offset, bus });
+        tone(860 + i * 180, 0.13, { type: "sine", volume: 0.04, slideTo: 1500 + i * 200, delay: delay + offset, bus });
+    });
+}
+
+function playMusicStep(delay, step, inBoss) {
+    const bus = audio.musicBus;
+    if (LOW_BONGO[step] === "x") {
+        tone(inBoss ? 120 : 145, 0.16, { type: "sine", volume: 0.26, slideTo: 80, delay, bus });
+    }
+    if (HIGH_BONGO[step] === "x") {
+        tone(inBoss ? 250 : 290, 0.1, { type: "sine", volume: 0.17, slideTo: 170, delay, bus });
+    }
+    noise(0.04, step % 4 === 2 ? 0.05 : 0.025, 5000, { delay, bus, highpass: true });
+
+    const marimba = (inBoss ? BOSS_MARIMBA : RUN_MARIMBA)[step];
+    if (marimba) {
+        tone(midiFrequency(marimba), 0.22, { type: "triangle", volume: 0.12, delay, bus });
+        tone(midiFrequency(marimba) * 4, 0.05, { type: "sine", volume: 0.03, delay, bus });
+    }
+    if (step % 8 === 0) {
+        const bass = (inBoss ? BOSS_BASS : RUN_BASS)[step / 8];
+        tone(midiFrequency(bass), 0.34, { type: "triangle", volume: 0.15, delay, bus });
+    }
+}
+
+// Lægger tonerne lidt ud i fremtiden, så rytmen ikke hakker, når billedet gør.
+function scheduleMusic() {
+    if (!audio.context || (mode !== "run" && mode !== "boss")) return;
+    const now = audio.context.currentTime;
+    const inBoss = mode === "boss";
+    const beat = 60 / (inBoss ? 142 : 112 + Math.min(level - 1, 6) * 3);
+    if (music.next < now) {
+        music.next = now + 0.05;
+    }
+    while (music.next < now + 0.15) {
+        const delay = music.next - now;
+        const step = music.step % 32;
+        playMusicStep(delay, step, inBoss);
+        if (!inBoss && music.step % (32 * (MONKEY_CALL_EVERY_BARS / 2)) === 16) {
+            monkeyCall(delay);
+        }
+        music.step += 1;
+        music.next += beat / 4;
+    }
+}
+
+function updateMuteLabel() {
+    const button = document.getElementById("mute");
+    button.textContent = audio.muted ? "Lyd: fra" : "Lyd: til";
+    button.setAttribute("aria-pressed", String(audio.muted));
+}
+
+function toggleMute() {
+    audio.muted = !audio.muted;
+    if (audio.master) {
+        audio.master.gain.value = audio.muted ? 0 : MASTER_VOLUME;
+    }
+    updateMuteLabel();
+    try {
+        localStorage.setItem(MUTED_KEY, audio.muted ? "1" : "0");
+    } catch {
+        // Valget gemmes bare ikke.
+    }
+}
+
+document.getElementById("mute").addEventListener("click", toggleMute);
+
 /* ---------- Skærm og baggrund ---------- */
 
 function resize() {
@@ -462,6 +659,7 @@ function pressJump() {
         monkey.isGrounded = false;
         monkey.ducking = false;
         monkey.velocity = 0;
+        sfx.climb();
         return;
     }
     if (monkey.isGrounded) {
@@ -469,6 +667,7 @@ function pressJump() {
         monkey.isGrounded = false;
         monkey.ducking = false;
         monkey.squash = -6;
+        sfx.jump();
     }
 }
 
@@ -485,6 +684,7 @@ function throwPeel() {
     if (ammo <= 0 || monkey.throwCooldown > 0 || peels.length >= 1) return;
     ammo -= 1;
     monkey.throwCooldown = THROW_COOLDOWN;
+    sfx.throwPeel();
 
     const startX = monkey.x + 20;
     const startY = monkey.y + 10;
@@ -510,6 +710,7 @@ window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") pressJump();
     if (e.code === "KeyX" || e.code === "KeyZ") throwPeel();
+    if (e.code === "KeyM") toggleMute();
     if (e.code === "Escape" || e.code === "KeyP") {
         if (mode === "paused") resumeGame();
         else pauseGame();
@@ -580,6 +781,7 @@ function pauseGame() {
 }
 
 function resumeGame() {
+    initAudio();
     mode = resumeMode;
     overlay.hidden = true;
 }
@@ -596,6 +798,7 @@ function showGameOver() {
 }
 
 function startGame(startLevel = 1) {
+    initAudio();
     overlay.hidden = true;
     keys.clear();
     resetGame(startLevel);
@@ -662,6 +865,7 @@ function startBoss() {
         planIndex: 0, hopsLeft: 0, vx: 0, vy: 0, airborne: false, targetTree: -1,
     };
     banner = { title: info.name, subtitle: level === 1 ? "Kast skrællen, når den brøler!" : "BOSSKAMP!", time: 130 };
+    sfx.bossIntro();
 }
 
 function finishBoss() {
@@ -680,6 +884,7 @@ function finishBoss() {
     makeClouds();
     startRun();
     banner = { title: `Level ${level}!`, subtitle: "+1 liv", time: 90 };
+    sfx.levelUp();
 }
 
 function hurt() {
@@ -690,7 +895,10 @@ function hurt() {
     addEffect("💥", monkey.x + 20, monkey.y + 10);
     if (lives <= 0) {
         mode = "gameover";
+        sfx.gameOver();
         showGameOver();
+    } else {
+        sfx.hurt();
     }
 }
 
@@ -855,9 +1063,11 @@ function updateRun() {
             if (pickup.kind === "heart") {
                 lives = Math.min(MAX_LIVES, lives + 1);
                 addEffect("❤️", pickup.x, pickup.y);
+                sfx.heart();
             } else {
                 ammo = Math.min(MAX_AMMO, ammo + 1);
                 score += 5;
+                sfx.banana();
                 dust(pickup.x + 12, pickup.y + 12, 6, "#fde047");
             }
             return false;
@@ -892,6 +1102,7 @@ function updateBoss() {
 }
 
 function startCharge() {
+    sfx.charge();
     boss.state = "charge";
     boss.time = 0;
     boss.dir = Math.sign(monkey.x - boss.x) || -1;
@@ -904,6 +1115,7 @@ function endChargeRun() {
     if (boss.chargesLeft > 0) {
         boss.state = "windup";
         boss.windupOverride = 22;
+        sfx.roar();
     } else {
         nextBossPhase();
     }
@@ -931,6 +1143,7 @@ function nextBossPhase() {
         boss.windupOverride = 0;
         boss.chargesLeft = stats.charges;
         boss.dir = Math.sign(monkey.x - boss.x) || -1;
+        sfx.roar();
     }
 }
 
@@ -941,6 +1154,7 @@ function startBossHop() {
     boss.vy = BOSS_HOP_VELOCITY;
     boss.dir = Math.sign(boss.vx) || -1;
     boss.airborne = true;
+    sfx.bossHop();
 }
 
 function tryStomp() {
@@ -1002,6 +1216,7 @@ function updateBossMovement() {
         }
 
         case "shake":
+            if (boss.time % 12 === 1) sfx.shake();
             if (boss.time >= stats.shakeFrames) {
                 if (monkey.onTree === boss.targetTree) {
                     leaveTree(0, false);
@@ -1023,6 +1238,7 @@ function updateBossMovement() {
                     boss.time = 0;
                     boss.hopsLeft -= 1;
                     shake = 4;
+                    sfx.thud();
                     dust(bossCenter(), groundY, 10);
                     if (stats.shockwave && boss.hopsLeft === 0) groundPound();
                 }
@@ -1109,6 +1325,7 @@ function updateBossMovement() {
 
 function groundPound() {
     shake = 8;
+    sfx.boom();
     for (const dir of [-1, 1]) {
         shots.push({ kind: "wave", x: bossCenter(), y: SHOT_GROUND_Y, vx: dir * (4 + level * 0.3), vy: 0, rolling: true, rot: 0 });
     }
@@ -1132,6 +1349,7 @@ function bossThrow() {
 }
 
 function launchShot(kind, targetX) {
+    sfx.toss();
     const startX = bossCenter();
     const startY = boss.y + 10;
     const frames = boss.stats.flightFrames;
@@ -1169,6 +1387,7 @@ function updatePeels() {
             // Når bossen går roligt, ser den skrællen og sparker den væk.
             addEffect("😤", bossCenter(), boss.y - 12, 34);
             dust(peel.x, peel.y, 6, "#facc15");
+            sfx.kick();
             return false;
         }
         return true;
@@ -1182,6 +1401,7 @@ function slipBoss() {
     boss.spinDir = -boss.dir || 1;
     boss.slide = boss.dir * 7;
     shake = 8;
+    sfx.slip();
     score += 10;
     dust(bossCenter(), groundY, 12, "#facc15");
 }
@@ -1195,6 +1415,7 @@ function stompBoss() {
     monkey.fromTree = false;
     shake = 10;
     score += 15;
+    sfx.stomp();
     addEffect("💫", bossCenter(), boss.y + 10, 40);
     dust(bossCenter(), boss.y + 40, 14, "#ffffff");
 
@@ -1211,6 +1432,7 @@ function stompBoss() {
     peels = [];
     groundBananas = [];
     banner = { title: "Besejret!", subtitle: `+${25 * level} point`, time: 90 };
+    sfx.bossDefeated();
 }
 
 function updateShots() {
@@ -1241,6 +1463,7 @@ function updateShots() {
         if (overlaps(monkeyBox(), shotBox(shot))) {
             if (shot.kind === "banana") {
                 ammo = Math.min(MAX_AMMO, ammo + 1);
+                sfx.banana();
                 return false;
             }
             hurt();
@@ -1254,6 +1477,7 @@ function updateGroundBananas() {
     groundBananas = groundBananas.filter((banana) => {
         if (overlaps(monkeyBox(), banana)) {
             ammo = Math.min(MAX_AMMO, ammo + 1);
+            sfx.banana();
             return false;
         }
         return --banana.life > 0;
@@ -1727,6 +1951,7 @@ function loop(now) {
     if (now - lastStep >= 1000 / 61) {
         lastStep = now;
         if (mode !== "paused") step();
+        scheduleMusic();
         draw();
     }
     requestAnimationFrame(loop);
@@ -1735,6 +1960,7 @@ function loop(now) {
 resize();
 makeClouds();
 monkey.x = runX();
+updateMuteLabel();
 showOverlay({
     title: "Monkey Timer 2",
     body: "Spring gennem junglen og slå bosserne.",
