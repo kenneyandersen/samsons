@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#2f80ed">
+    <title>Monkey Timer 2</title>
+    <style>
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+        html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
+        body {
+            background: #0d1b3e;
+            color: #fff;
+            font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #stage { position: fixed; inset: 0; overflow: hidden; }
+        #gameCanvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+        #hud {
+            position: absolute;
+            top: max(8px, env(safe-area-inset-top));
+            left: max(8px, env(safe-area-inset-left));
+            right: max(8px, env(safe-area-inset-right));
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            pointer-events: none;
+        }
+        .chip {
+            padding: 7px 11px;
+            border-radius: 999px;
+            background: rgba(8, 15, 35, 0.58);
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        #levelChip { color: #fde047; }
+        #scoreChip { margin-left: auto; }
+        #pause {
+            width: 48px;
+            height: 48px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(8, 15, 35, 0.58);
+            color: #fff;
+            font: inherit;
+            font-size: 18px;
+            font-weight: 900;
+            cursor: pointer;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        #controls {
+            position: absolute;
+            left: max(14px, env(safe-area-inset-left));
+            right: max(14px, env(safe-area-inset-right));
+            bottom: max(16px, env(safe-area-inset-bottom));
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            pointer-events: none;
+        }
+        .pad { display: flex; gap: 10px; }
+        .pad button {
+            width: clamp(68px, 20vw, 92px);
+            height: clamp(68px, 20vw, 92px);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            background: rgba(8, 15, 35, 0.34);
+            color: #fff;
+            font: inherit;
+            font-size: 19px;
+            font-weight: 800;
+            pointer-events: auto;
+            touch-action: none;
+        }
+        .pad button:active { background: rgba(253, 224, 71, 0.7); color: #1f2937; }
+        .pad button.call {
+            border-color: #fde047;
+            background: rgba(253, 224, 71, 0.85);
+            color: #1f2937;
+        }
+        body.mode-run .boss-only { display: none; }
+        body.mode-boss .run-only { display: none; }
+        body:not(.mode-run):not(.mode-boss) #controls { display: none; }
+        @media (orientation: portrait) {
+            #controls { bottom: 10vh; bottom: 10dvh; }
+        }
+        @media (hover: hover) and (pointer: fine) {
+            #controls { display: none; }
+        }
+
+        #overlay {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: safe center;
+            overflow-y: auto;
+            padding: 16px;
+            background: rgba(6, 12, 30, 0.74);
+        }
+        .card { width: 100%; max-width: 430px; text-align: center; }
+        .card h1 {
+            margin: 0 0 8px;
+            font-size: clamp(38px, 10vmin, 56px);
+            font-weight: 900;
+            line-height: 1.02;
+            letter-spacing: -0.01em;
+        }
+        .card p { margin: 0 0 14px; font-size: 18px; line-height: 1.35; }
+        #howto {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px 10px;
+            margin-bottom: 16px;
+            text-align: left;
+            font-size: 15px;
+            line-height: 1.25;
+        }
+        #howto b { color: #fde047; }
+        .primary, .back {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 56px;
+            border-radius: 14px;
+            font: inherit;
+            font-size: 20px;
+            font-weight: 800;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .primary { border: 0; background: #fbbf24; color: #1f2937; }
+        .primary:disabled { opacity: 0.55; }
+        .back { margin-top: 10px; border: 2px solid rgba(255, 255, 255, 0.6); color: #fff; font-size: 18px; }
+        #best { margin: 12px 0 0; color: #fde047; font-size: 16px; font-weight: 700; }
+        button:focus-visible, a:focus-visible { outline: 3px solid #fde047; outline-offset: 2px; }
+    </style>
+</head>
+<body class="mode-menu">
+    <main id="stage">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="hud">
+            <button id="pause" type="button" tabindex="-1" aria-label="Pause">II</button>
+            <span id="levelChip" class="chip">Level 1</span>
+            <span id="livesChip" class="chip" aria-label="Liv">❤️</span>
+            <span id="ammoChip" class="chip">🍌 0</span>
+            <span id="scoreChip" class="chip">0</span>
+        </div>
+
+        <div id="controls">
+            <div class="pad">
+                <button id="btnDuck" class="run-only" type="button" tabindex="-1">Buk</button>
+                <button id="btnLeft" class="boss-only" type="button" tabindex="-1" aria-label="Gå til venstre">◀</button>
+                <button id="btnRight" class="boss-only" type="button" tabindex="-1" aria-label="Gå til højre">▶</button>
+            </div>
+            <div class="pad">
+                <button id="btnThrow" class="boss-only" type="button" tabindex="-1">Kast</button>
+                <button id="btnJump" type="button" tabindex="-1">Hop</button>
+            </div>
+        </div>
+
+        <section id="overlay">
+            <div class="card">
+                <h1 id="overlayTitle"></h1>
+                <p id="overlayBody"></p>
+                <div id="howto">
+                    <div><b>Sten og huller</b><br>Hop over dem</div>
+                    <div><b>Slanger</b><br>Buk dig under dem</div>
+                    <div><b>Boss stormer</b><br>Kast en skræl i vejen, når den brøler</div>
+                    <div><b>Boss er træt eller væltet</b><br>Hop på den!</div>
+                    <div style="grid-column: 1 / -1"><b>Træer</b><br>Tryk Hop ved stammen for at klatre op, og hop ned på bossen. Men bliver du for længe, ryster den dig ned!</div>
+                </div>
+                <button id="overlayButton" class="primary" type="button"></button>
+                <a class="back" href="../">Tilbage til alle spil</a>
+                <p id="best"></p>
+            </div>
+        </section>
+    </main>
+
+<script>
+"use strict";
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const stage = document.getElementById("stage");
+const overlay = document.getElementById("overlay");
+
+const TAU = Math.PI * 2;
+const groundY = 240; // Verdens jordhøjde. Kameraet flyttes, så den passer til skærmen.
+
+const START_LIVES = 3;
+const MAX_LIVES = 5;
+const MAX_AMMO = 6;
+const HURT_SAFE_FRAMES = 120;
+
+const GRAVITY = 0.6;
+const JUMP_FORCE = -13;
+const WALK_SPEED = 5;
+const STAND_HEIGHT = 40;
+const DUCK_HEIGHT = 22;
+
+const THROW_COOLDOWN = 35;
+const PEEL_LIFE = 320;
+const PEEL_FLIGHT_FRAMES = 24;
+const PEEL_GRAVITY = 0.5;
+const PEEL_GROUND_Y = groundY - 8;
+const SHOT_GRAVITY = 0.25;
+const SHOT_MAX_FALL = 9;
+const SHOT_GROUND_Y = groundY - 14;
+const GROUND_BANANA_LIFE = 420;
+
+const SNAKE_BOTTOM_Y = groundY - 32;
+const BRANCH_Y = groundY - 225;
+
+const BOSS_SIZE = 84;
+const BOSS_Y = groundY - BOSS_SIZE;
+const STOMP_BOUNCE = -11;
+const BOSS_HOP_GRAVITY = 0.5;
+const BOSS_HOP_VELOCITY = -14;
+const BOSS_HOP_FRAMES = 56;
+const BOSS_HOP_PAUSE = 14;
+const BOSS_TREE_RUN_SPEED = 5;
+
+// Træerne i bosskampen står, hvor de står i forhold til skærmens bredde.
+const TREE_FRACTIONS = [0.2, 0.62];
+const TREE_BRANCH_Y = groundY - 150;
+const TREE_BRANCH_HALF = 58;
+const TREE_REACH = 28;
+const CLIMB_FRAMES = 16;
+
+const LAYER_WIDTH = 1400;
+const STORAGE_KEY = "monkey-timer-2-best";
+
+const BOSSES = [
+    { name: "Gorilla Gunnar", icon: "🦍", hat: null },
+    { name: "Orangutang Olga", icon: "🦧", hat: null },
+    { name: "Bandit-Bent", icon: "🦍", hat: "🎩" },
+    { name: "Kong Kokos", icon: "🦧", hat: "👑" },
+];
+
+const THEMES = [
+    { sky: ["#2f80ed", "#a6e0ff"], far: "#a9dfc8", mid: "#79cc92", near: "#46b169", grass: "#4fce63", blade: "#36b150", soil: "#8a5a34", soilDark: "#6d4426", sun: "#ffe27a", itemAlpha: 1 },
+    { sky: ["#6a3fb0", "#ffa877"], far: "#d09aa8", mid: "#a8768d", near: "#785f78", grass: "#7bb54d", blade: "#619a3b", soil: "#7a4a35", soilDark: "#5e3627", sun: "#ffd27a", itemAlpha: 0.9 },
+    { sky: ["#0d1438", "#3e4486"], far: "#3e4b86", mid: "#303d72", near: "#242e5c", grass: "#2f9160", blade: "#23754c", soil: "#4f3a44", soilDark: "#3a2a34", sun: "#f3f1de", stars: true, itemAlpha: 0.72 },
+    { sky: ["#0f766e", "#90ecd2"], far: "#7fd6b4", mid: "#4fb48b", near: "#2c8a66", grass: "#3bbf6f", blade: "#2a9d58", soil: "#6b5433", soilDark: "#524025", sun: "#fff3b0", itemAlpha: 1 },
+];
+
+// Alt, der gør hver boss sværere, står her.
+const bossStats = (level) => ({
+    hp: 1 + level,
+    speed: Math.min(3, 1.2 + (level - 1) * 0.3),
+    throwEvery: Math.max(85, 175 - (level - 1) * 16),
+    coconuts: 1 + Math.floor((level - 1) / 3),
+    flightFrames: Math.max(52, 72 - level * 3),
+    throwSpread: Math.max(50, 110 - (level - 1) * 10),
+    rollingCoconuts: level >= 2,
+    coconutRain: level >= 4,
+    shockwave: level >= 3,
+    walkFrames: Math.max(170, 260 - (level - 1) * 15),
+    windupFrames: Math.max(45, 95 - (level - 1) * 8),
+    chargeSpeed: Math.min(11, 6 + (level - 1) * 0.7),
+    charges: level >= 3 ? 2 : 1,
+    stunFrames: Math.max(160, 320 - (level - 1) * 25),
+    hops: 2 + Math.min(3, Math.floor(level / 2)),
+    hopAimChance: Math.min(0.6, 0.25 + (level - 1) * 0.08),
+    tiredFrames: Math.max(100, 210 - (level - 1) * 18),
+    treeLimit: Math.max(180, 320 - (level - 1) * 20),
+    shakeFrames: Math.max(60, 100 - (level - 1) * 6),
+    plan: level === 1 ? ["throw", "hop", "charge"] : ["throw", "charge", "hop", "throw", "hop", "charge"],
+});
+
+const obstaclesBeforeBoss = (level) => 9 + level * 2;
+const runSpeed = (level) => Math.min(8.5, 5 + (level - 1) * 0.5);
+const minObstacleGap = (level) => Math.max(58, 88 - level * 5);
+const INTRO_OBSTACLES = ["rock", "hole", "snake"];
+
+/* ---------- Tilstand ---------- */
+
+const monkey = {
+    x: 75, y: groundY - STAND_HEIGHT, width: 40,
+    velocity: 0, isGrounded: true, ducking: false, invulnerable: 0, throwCooldown: 0, squash: 0,
+    onTree: -1, climb: 0, treeTime: 0, fromTree: false,
+};
+
+let mode = "menu"; // menu, run, boss, gameover eller paused
+let resumeMode = "run";
+let level = 1;
+let score = 0;
+let lives = START_LIVES;
+let ammo = 0;
+let best = 0;
+
+let viewW = 800;
+let viewH = 360;
+let renderScale = 1;
+let bottomPad = 70;
+let layers = [];
+let builtLayerKey = "";
+
+let scroll = 0;
+let gameSpeed = runSpeed(1);
+let spawnTimer = 0;
+let nextGap = 60;
+let passed = 0;
+let spawned = 0;
+let shake = 0;
+let banner = null;
+let frameCount = 0;
+
+let boss = null;
+let obstacles = [];
+let pickups = [];
+let clouds = [];
+let peels = [];
+let shots = [];
+let groundBananas = [];
+let effects = [];
+let particles = [];
+
+const keys = new Set();
+
+const rand = (min, max) => min + Math.random() * (max - min);
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const overlaps = (a, b) =>
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+const groundScreenY = () => viewH - bottomPad;
+const cameraY = () => groundScreenY() - groundY;
+const worldTop = () => -cameraY();
+const runX = () => Math.max(60, viewW * 0.16);
+const patrolMin = () => viewW * 0.5;
+const patrolMax = () => viewW - BOSS_SIZE - 16;
+const theme = () => THEMES[(level - 1) % THEMES.length];
+
+const monkeyBox = () => monkey.ducking
+    ? { x: monkey.x, y: monkey.y + STAND_HEIGHT - DUCK_HEIGHT, width: monkey.width, height: DUCK_HEIGHT }
+    : { x: monkey.x, y: monkey.y, width: monkey.width, height: STAND_HEIGHT };
+const bossBox = () => ({ x: boss.x + 14, y: boss.y + 10, width: BOSS_SIZE - 28, height: BOSS_SIZE - 10 });
+const stompBox = () => ({ x: boss.x + 4, y: boss.y + 26, width: BOSS_SIZE - 8, height: BOSS_SIZE - 26 });
+const shotBox = (shot) => {
+    const half = shot.kind === "banana" ? 16 : 9;
+    return { x: shot.x - half, y: shot.y - half, width: half * 2, height: half * 2 };
+};
+const headBox = () => ({ x: boss.x + 6, y: boss.y - 4, width: BOSS_SIZE - 12, height: 40 });
+const bossCenter = () => boss.x + BOSS_SIZE / 2;
+const treeX = (index) => viewW * TREE_FRACTIONS[index];
+const nearTrunk = () => TREE_FRACTIONS.findIndex((_, index) => Math.abs(monkey.x + 20 - treeX(index)) < TREE_REACH);
+
+try {
+    best = Number(localStorage.getItem(STORAGE_KEY)) || 0;
+} catch {
+    // Uden adgang til lager gemmes bedste score bare ikke.
+}
+
+function saveBest() {
+    if (score <= best) return;
+    best = score;
+    try {
+        localStorage.setItem(STORAGE_KEY, String(best));
+    } catch {
+        // Spillet virker fint uden.
+    }
+}
+
+/* ---------- Skærm og baggrund ---------- */
+
+function resize() {
+    const cssW = stage.clientWidth;
+    const cssH = stage.clientHeight;
+    const scale = Math.max(Math.min(cssW / 480, cssH / 360), cssW / 1000);
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    viewW = cssW / scale;
+    viewH = cssH / scale;
+    // På en telefon på langs bliver der jord nederst, hvor tommelfingrene er.
+    bottomPad = cssH > cssW ? viewH * 0.34 : 70;
+    renderScale = scale * pixelRatio;
+    canvas.width = Math.round(cssW * pixelRatio);
+    canvas.height = Math.round(cssH * pixelRatio);
+    buildLayers();
+}
+
+const LAYER_DEFS = [
+    { speed: 0.12, baseY: 150, waves: [[16, 2], [9, 5]], color: "far", size: 1, icons: ["🏠", "🌴", "🏠", "🌳"], sizes: [20, 26], spacing: [90, 190], alpha: 0.75 },
+    { speed: 0.3, baseY: 186, waves: [[14, 3], [7, 7]], color: "mid", size: 1, icons: ["🏠", "🌴", "🏡", "🌴"], sizes: [30, 58], spacing: [130, 280], alpha: 0.9 },
+    { speed: 0.62, baseY: 224, waves: [[9, 4], [5, 9]], color: "near", size: 1, icons: ["🌴", "🌳", "🌴", "🏠"], sizes: [78, 96], spacing: [260, 480], alpha: 1 },
+];
+
+for (const def of LAYER_DEFS) {
+    def.items = [];
+    for (let x = rand(0, 80); x < LAYER_WIDTH - 60; x += rand(def.spacing[0], def.spacing[1])) {
+        const icon = pick(def.icons);
+        def.items.push({ x, icon, size: icon === "🌴" || icon === "🌳" ? def.sizes[1] : def.sizes[0] * (def.color === "near" ? 0.55 : 1) });
+    }
+}
+
+function buildLayers() {
+    const layerScale = Math.min(2, renderScale);
+    const key = `${layerScale.toFixed(2)}:${(level - 1) % THEMES.length}`;
+    if (key === builtLayerKey) return;
+    builtLayerKey = key;
+    const colors = theme();
+
+    layers = LAYER_DEFS.map((def) => {
+        const layer = document.createElement("canvas");
+        layer.width = Math.round(LAYER_WIDTH * layerScale);
+        layer.height = Math.round((groundY + 10) * layerScale);
+        const g = layer.getContext("2d");
+        g.scale(layerScale, layerScale);
+        const hillY = (x) => def.baseY + def.waves.reduce(
+            (sum, [height, count], i) => sum + Math.sin((x / LAYER_WIDTH) * TAU * count + i * 1.7) * height, 0);
+
+        g.font = "20px Arial";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.globalAlpha = def.alpha * colors.itemAlpha;
+        for (const item of def.items) {
+            g.font = `${item.size}px Arial`;
+            for (const wrap of [-LAYER_WIDTH, 0, LAYER_WIDTH]) {
+                g.fillText(item.icon, item.x + wrap, hillY(item.x) - item.size * 0.36);
+            }
+        }
+        g.globalAlpha = 1;
+
+        g.fillStyle = colors[def.color];
+        g.beginPath();
+        g.moveTo(0, groundY + 10);
+        for (let x = 0; x <= LAYER_WIDTH; x += 8) {
+            g.lineTo(x, hillY(x));
+        }
+        g.lineTo(LAYER_WIDTH, groundY + 10);
+        g.fill();
+        return { canvas: layer, speed: def.speed };
+    });
+}
+
+window.addEventListener("resize", resize);
+
+/* ---------- Styring ---------- */
+
+function pressJump() {
+    if (mode !== "run" && mode !== "boss") return;
+    if (monkey.onTree >= 0) {
+        if (monkey.climb === 0) leaveTree(-6, true);
+        return;
+    }
+    const trunk = mode === "boss" && boss && boss.state !== "enter" && monkey.isGrounded ? nearTrunk() : -1;
+    if (trunk >= 0) {
+        monkey.onTree = trunk;
+        monkey.climb = CLIMB_FRAMES;
+        monkey.treeTime = 0;
+        monkey.isGrounded = false;
+        monkey.ducking = false;
+        monkey.velocity = 0;
+        return;
+    }
+    if (monkey.isGrounded) {
+        monkey.velocity = JUMP_FORCE;
+        monkey.isGrounded = false;
+        monkey.ducking = false;
+        monkey.squash = -6;
+    }
+}
+
+function leaveTree(velocity, canStomp) {
+    monkey.onTree = -1;
+    monkey.climb = 0;
+    monkey.velocity = velocity;
+    monkey.isGrounded = false;
+    monkey.fromTree = canStomp;
+}
+
+function throwPeel() {
+    if (mode !== "boss" || !boss || boss.state === "enter" || boss.state === "defeated") return;
+    if (ammo <= 0 || monkey.throwCooldown > 0 || peels.length >= 1) return;
+    ammo -= 1;
+    monkey.throwCooldown = THROW_COOLDOWN;
+
+    const startX = monkey.x + 20;
+    const startY = monkey.y + 10;
+    const toBoss = bossCenter() - startX;
+    const landX = clamp(startX + Math.sign(toBoss || 1) * clamp(Math.abs(toBoss) * 0.55, 60, 240), 20, viewW - 20);
+    peels.push({
+        x: startX,
+        y: startY,
+        vx: (landX - startX) / PEEL_FLIGHT_FRAMES,
+        vy: (PEEL_GROUND_Y - startY - 0.5 * PEEL_GRAVITY * PEEL_FLIGHT_FRAMES ** 2) / PEEL_FLIGHT_FRAMES,
+        landed: false, life: PEEL_LIFE, rot: 0,
+    });
+}
+
+const duckHeld = () => keys.has("ArrowDown") || keys.has("KeyS") || keys.has("TouchDuck");
+
+window.addEventListener("keydown", (e) => {
+    const playing = mode === "run" || mode === "boss";
+    if (playing && ["Space", "ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown"].includes(e.code)) {
+        e.preventDefault();
+    }
+    keys.add(e.code);
+    if (e.repeat) return;
+    if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") pressJump();
+    if (e.code === "KeyX" || e.code === "KeyZ") throwPeel();
+    if (e.code === "Escape" || e.code === "KeyP") {
+        if (mode === "paused") resumeGame();
+        else pauseGame();
+    }
+});
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+window.addEventListener("blur", () => {
+    keys.clear();
+    pauseGame();
+});
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pauseGame();
+});
+
+// Tryk på selve spillet er også et hop.
+canvas.addEventListener("pointerdown", pressJump);
+
+function bindPress(id, onPress) {
+    document.getElementById(id).addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        onPress();
+    });
+}
+
+function bindHold(id, key) {
+    const button = document.getElementById(id);
+    button.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        button.setPointerCapture(e.pointerId);
+        keys.add(key);
+    });
+    for (const type of ["pointerup", "pointercancel"]) {
+        button.addEventListener(type, () => keys.delete(key));
+    }
+}
+
+bindPress("btnJump", pressJump);
+bindPress("btnThrow", throwPeel);
+bindPress("pause", pauseGame);
+bindHold("btnLeft", "TouchLeft");
+bindHold("btnRight", "TouchRight");
+bindHold("btnDuck", "TouchDuck");
+
+/* ---------- Menuer ---------- */
+
+function showOverlay({ title, body, button, action, howto = false, delay = 0 }) {
+    document.getElementById("overlayTitle").textContent = title;
+    document.getElementById("overlayBody").textContent = body;
+    document.getElementById("howto").hidden = !howto;
+    document.getElementById("best").textContent = best > 0 ? `Bedste score: ${best}` : "";
+    const overlayButton = document.getElementById("overlayButton");
+    overlayButton.textContent = button;
+    overlayButton.onclick = action;
+    overlayButton.disabled = delay > 0;
+    overlay.hidden = false;
+    setTimeout(() => {
+        overlayButton.disabled = false;
+        overlayButton.focus();
+    }, delay);
+}
+
+function pauseGame() {
+    if (mode !== "run" && mode !== "boss") return;
+    resumeMode = mode;
+    mode = "paused";
+    keys.clear();
+    showOverlay({ title: "Pause", body: "Aben trækker vejret.", button: "Fortsæt", action: resumeGame, howto: true });
+}
+
+function resumeGame() {
+    mode = resumeMode;
+    overlay.hidden = true;
+}
+
+function showGameOver() {
+    saveBest();
+    showOverlay({
+        title: "Game Over",
+        body: `Du fik ${score} point. Du fortsætter fra level ${level}.`,
+        button: "Prøv igen",
+        action: () => startGame(level),
+        delay: 600,
+    });
+}
+
+function startGame(startLevel = 1) {
+    overlay.hidden = true;
+    keys.clear();
+    resetGame(startLevel);
+}
+
+/* ---------- Spillets gang ---------- */
+
+function makeClouds() {
+    clouds = Array.from({ length: 7 }, () => ({
+        x: rand(0, viewW), y: rand(worldTop() + 60, 110), size: rand(30, 58), speed: rand(0.15, 0.5),
+    }));
+}
+
+function resetGame(startLevel = 1) {
+    mode = "run";
+    level = startLevel;
+    score = 0;
+    lives = START_LIVES;
+    ammo = 0;
+    boss = null;
+    obstacles = [];
+    pickups = [];
+    peels = [];
+    shots = [];
+    groundBananas = [];
+    effects = [];
+    particles = [];
+    monkey.x = runX();
+    monkey.y = groundY - STAND_HEIGHT;
+    monkey.velocity = 0;
+    monkey.isGrounded = true;
+    monkey.ducking = false;
+    monkey.invulnerable = 0;
+    monkey.onTree = -1;
+    monkey.climb = 0;
+    monkey.fromTree = false;
+    buildLayers();
+    makeClouds();
+    startRun();
+    banner = { title: `Level ${level}`, subtitle: "", time: 70 };
+}
+
+function startRun() {
+    gameSpeed = runSpeed(level);
+    passed = 0;
+    spawned = 0;
+    spawnTimer = 0;
+    nextGap = 45;
+}
+
+function startBoss() {
+    const info = BOSSES[(level - 1) % BOSSES.length];
+    const stats = bossStats(level);
+    mode = "boss";
+    obstacles = [];
+    pickups = [];
+    ammo = Math.max(ammo, 2);
+    lives = Math.min(MAX_LIVES, lives + 1);
+    boss = {
+        ...info, stats,
+        x: viewW + 20, y: BOSS_Y,
+        hp: stats.hp, state: "enter", time: 0, dir: -1, slide: 0, spin: 0, spinDir: 1,
+        fall: 0, throwTimer: 60, walkTimer: stats.walkFrames, chargesLeft: stats.charges,
+        planIndex: 0, hopsLeft: 0, vx: 0, vy: 0, airborne: false, targetTree: -1,
+    };
+    banner = { title: info.name, subtitle: level === 1 ? "Kast skrællen, når den brøler!" : "BOSSKAMP!", time: 130 };
+}
+
+function finishBoss() {
+    level += 1;
+    mode = "run";
+    boss = null;
+    peels = [];
+    shots = [];
+    groundBananas = [];
+    lives = Math.min(MAX_LIVES, lives + 1);
+    monkey.invulnerable = 60;
+    monkey.onTree = -1;
+    monkey.climb = 0;
+    monkey.fromTree = false;
+    buildLayers();
+    makeClouds();
+    startRun();
+    banner = { title: `Level ${level}!`, subtitle: "+1 liv", time: 90 };
+}
+
+function hurt() {
+    if (monkey.invulnerable > 0 || (mode !== "run" && mode !== "boss")) return;
+    lives -= 1;
+    monkey.invulnerable = HURT_SAFE_FRAMES;
+    shake = 10;
+    addEffect("💥", monkey.x + 20, monkey.y + 10);
+    if (lives <= 0) {
+        mode = "gameover";
+        showGameOver();
+    }
+}
+
+function addEffect(icon, x, y, size = 30) {
+    effects.push({ icon, x, y, size, life: 40 });
+}
+
+function dust(x, y, count, color = "rgba(255,255,255,0.7)") {
+    for (let i = 0; i < count; i++) {
+        particles.push({ x, y, vx: rand(-2.2, 2.2), vy: rand(-2.6, -0.4), life: rand(14, 28), size: rand(2, 5), color });
+    }
+}
+
+/* ---------- Opdatering ---------- */
+
+function step() {
+    frameCount += 1;
+    updateClouds();
+    if (shake > 0) shake -= 1;
+    if (banner && --banner.time <= 0) banner = null;
+
+    effects = effects.filter((effect) => {
+        effect.y -= 0.8;
+        return --effect.life > 0;
+    });
+    particles = particles.filter((particle) => {
+        particle.x += particle.vx - (mode === "run" ? gameSpeed * 0.5 : 0);
+        particle.y += particle.vy;
+        particle.vy += 0.12;
+        return --particle.life > 0;
+    });
+
+    if (mode === "menu") {
+        scroll += 1.5;
+    } else if (mode === "run") {
+        updateMonkey();
+        if (mode === "run") updateRun();
+    } else if (mode === "boss") {
+        updateMonkey();
+        if (mode === "boss") updateBoss();
+    }
+    updateUi();
+}
+
+function updateClouds() {
+    const drift = mode === "run" ? gameSpeed * 0.05 : 0;
+    for (const cloud of clouds) {
+        cloud.x -= cloud.speed + drift;
+        if (cloud.x < -80) {
+            cloud.x = viewW + rand(20, 120);
+            cloud.y = rand(worldTop() + 60, 110);
+        }
+    }
+}
+
+const overHole = () => obstacles.some((obstacle) =>
+    obstacle.type === "hole" && monkey.x + 20 > obstacle.x + 8 && monkey.x + 20 < obstacle.x + obstacle.width - 8);
+
+function updateMonkey() {
+    if (monkey.invulnerable > 0) monkey.invulnerable -= 1;
+    if (monkey.throwCooldown > 0) monkey.throwCooldown -= 1;
+    if (monkey.squash > 0) monkey.squash -= 1;
+    if (monkey.squash < 0) monkey.squash += 1;
+
+    if (mode === "boss") {
+        const right = keys.has("ArrowRight") || keys.has("KeyD") || keys.has("TouchRight");
+        const left = keys.has("ArrowLeft") || keys.has("KeyA") || keys.has("TouchLeft");
+        monkey.x = clamp(monkey.x + ((right ? 1 : 0) - (left ? 1 : 0)) * WALK_SPEED, 12, viewW - 52);
+    } else if (monkey.x !== runX()) {
+        // Tilbage til startpladsen, når banen begynder at køre igen.
+        monkey.x += clamp(runX() - monkey.x, -3, 3);
+    }
+
+    if (monkey.onTree >= 0) {
+        updateMonkeyInTree();
+        return;
+    }
+
+    const wasAirborne = !monkey.isGrounded;
+    monkey.velocity += GRAVITY;
+    monkey.y += monkey.velocity;
+
+    if (monkey.y >= groundY - STAND_HEIGHT) {
+        if (monkey.invulnerable === 0 && overHole()) {
+            monkey.isGrounded = false;
+            monkey.ducking = false;
+            if (monkey.y > groundY - 6) {
+                hurt();
+                monkey.y = groundY - STAND_HEIGHT;
+                monkey.velocity = JUMP_FORCE * 0.7;
+            }
+            return;
+        }
+        monkey.y = groundY - STAND_HEIGHT;
+        monkey.velocity = 0;
+        monkey.isGrounded = true;
+        monkey.fromTree = false;
+        if (wasAirborne) {
+            monkey.squash = 6;
+            dust(monkey.x + 20, groundY, 6);
+        }
+    }
+    monkey.ducking = monkey.isGrounded && duckHeld();
+}
+
+function updateMonkeyInTree() {
+    const trunkX = treeX(monkey.onTree) - 20;
+    const branchY = TREE_BRANCH_Y - STAND_HEIGHT;
+
+    if (monkey.climb > 0) {
+        monkey.x = trunkX;
+        monkey.y += (branchY - monkey.y) / monkey.climb;
+        monkey.climb -= 1;
+        return;
+    }
+    monkey.y = branchY;
+    monkey.treeTime += 1;
+    if (Math.abs(monkey.x - trunkX) > TREE_BRANCH_HALF) {
+        // Går man ud over grenens ende, falder man ned.
+        leaveTree(0, true);
+    }
+}
+
+function makeObstacle() {
+    const type = level === 1 && spawned < INTRO_OBSTACLES.length
+        ? INTRO_OBSTACLES[spawned]
+        : pick(["rock", "rock", "hole", "hole", "snake", "snake"]);
+    const x = viewW + 20;
+
+    if (type === "hole") {
+        return { type, x, y: groundY, width: Math.min(120, 62 + level * 8), height: 40 };
+    }
+    if (type === "snake") {
+        return { type, x, y: BRANCH_Y, width: 34, height: SNAKE_BOTTOM_Y - BRANCH_Y };
+    }
+    const height = level >= 3 && Math.random() < 0.4 ? 50 : 34;
+    return { type, x, y: groundY - height, width: height + 6, height, shape: Math.random() };
+}
+
+function updateRun() {
+    scroll += gameSpeed;
+
+    if (++spawnTimer > nextGap && spawned < obstaclesBeforeBoss(level)) {
+        spawnTimer = 0;
+        const gap = minObstacleGap(level);
+        nextGap = Math.floor(rand(gap, gap + 62));
+        const obstacle = makeObstacle();
+        obstacles.push(obstacle);
+        spawned += 1;
+
+        if (obstacle.type !== "snake" && Math.random() > 0.35) {
+            pickups.push({ kind: "banana", x: obstacle.x + rand(0, 20), y: groundY - 140 - rand(0, 50), width: 25, height: 25 });
+        }
+        if (lives < MAX_LIVES && Math.random() < 0.18) {
+            pickups.push({ kind: "heart", x: obstacle.x + 150, y: groundY - 125, width: 28, height: 28 });
+        }
+    }
+
+    pickups = pickups.filter((pickup) => {
+        pickup.x -= gameSpeed;
+        if (overlaps(monkeyBox(), pickup)) {
+            if (pickup.kind === "heart") {
+                lives = Math.min(MAX_LIVES, lives + 1);
+                addEffect("❤️", pickup.x, pickup.y);
+            } else {
+                ammo = Math.min(MAX_AMMO, ammo + 1);
+                score += 5;
+                dust(pickup.x + 12, pickup.y + 12, 6, "#fde047");
+            }
+            return false;
+        }
+        return pickup.x + pickup.width > -20;
+    });
+
+    obstacles = obstacles.filter((obstacle) => {
+        obstacle.x -= gameSpeed;
+        if (obstacle.type !== "hole" && overlaps(monkeyBox(), obstacle)) {
+            hurt();
+        }
+        if (obstacle.x + obstacle.width < -60) {
+            score += 1;
+            passed += 1;
+            return false;
+        }
+        return true;
+    });
+
+    if (mode === "run" && passed >= obstaclesBeforeBoss(level)) {
+        startBoss();
+    }
+}
+
+function updateBoss() {
+    updateBossMovement();
+    if (!boss) return;
+    updatePeels();
+    updateShots();
+    updateGroundBananas();
+}
+
+function startCharge() {
+    boss.state = "charge";
+    boss.time = 0;
+    boss.dir = Math.sign(monkey.x - boss.x) || -1;
+}
+
+function endChargeRun() {
+    boss.chargesLeft -= 1;
+    boss.dir = -boss.dir;
+    boss.time = 0;
+    if (boss.chargesLeft > 0) {
+        boss.state = "windup";
+        boss.windupOverride = 22;
+    } else {
+        nextBossPhase();
+    }
+}
+
+// Bossen skifter mellem perioder med forskellige angreb, se "plan" i bossStats.
+function nextBossPhase() {
+    const { stats } = boss;
+    const phase = stats.plan[boss.planIndex % stats.plan.length];
+    boss.planIndex += 1;
+    boss.time = 0;
+    boss.y = BOSS_Y;
+    boss.spin = 0;
+
+    if (phase === "throw") {
+        boss.state = "walk";
+        boss.walkTimer = stats.walkFrames;
+        boss.dir = bossCenter() > viewW * 0.6 ? -1 : 1;
+    } else if (phase === "hop") {
+        boss.state = "hop";
+        boss.hopsLeft = stats.hops;
+        startBossHop();
+    } else {
+        boss.state = "windup";
+        boss.windupOverride = 0;
+        boss.chargesLeft = stats.charges;
+        boss.dir = Math.sign(monkey.x - boss.x) || -1;
+    }
+}
+
+function startBossHop() {
+    const target = clamp(Math.random() < boss.stats.hopAimChance ? monkey.x - 20 + rand(-70, 70) : rand(0, viewW), 20, viewW - BOSS_SIZE - 16);
+    boss.hopTarget = target + BOSS_SIZE / 2;
+    boss.vx = (target - boss.x) / BOSS_HOP_FRAMES;
+    boss.vy = BOSS_HOP_VELOCITY;
+    boss.dir = Math.sign(boss.vx) || -1;
+    boss.airborne = true;
+}
+
+function tryStomp() {
+    if (monkey.velocity <= 0 || monkey.onTree >= 0) return false;
+    const weakened = boss.state === "stun" || boss.state === "tired";
+    if (!weakened && !monkey.fromTree) return false;
+    if (!overlaps(monkeyBox(), boss.state === "stun" ? stompBox() : headBox())) return false;
+    stompBoss();
+    return true;
+}
+
+function updateBossMovement() {
+    const { stats } = boss;
+    boss.time += 1;
+    boss.x = clamp(boss.x, 4, Math.max(viewW + 40, boss.x));
+
+    if (boss.state === "enter") {
+        boss.x -= 3;
+        if (boss.x <= patrolMax() - 30) {
+            nextBossPhase();
+        }
+        return;
+    }
+    if (boss.state === "defeated") {
+        boss.x += 3;
+        boss.fall += 0.35;
+        boss.y += boss.fall - 5;
+        boss.spin += 0.15;
+        if (boss.time >= 100) {
+            finishBoss();
+        }
+        return;
+    }
+    if (boss.state !== "slip" && boss.state !== "recover" && tryStomp()) {
+        return;
+    }
+
+    // Sidder aben for længe i træet, løber bossen derhen og ryster det.
+    if (monkey.onTree >= 0 && monkey.treeTime > stats.treeLimit && (boss.state === "walk" || boss.state === "tired")) {
+        boss.state = "toTree";
+        boss.targetTree = monkey.onTree;
+        boss.time = 0;
+    }
+
+    switch (boss.state) {
+        case "toTree": {
+            if (monkey.onTree !== boss.targetTree) {
+                nextBossPhase();
+                return;
+            }
+            const distance = treeX(boss.targetTree) - bossCenter();
+            boss.dir = Math.sign(distance) || boss.dir;
+            boss.x += clamp(distance, -BOSS_TREE_RUN_SPEED, BOSS_TREE_RUN_SPEED);
+            if (Math.abs(distance) < 6) {
+                boss.state = "shake";
+                boss.time = 0;
+            }
+            break;
+        }
+
+        case "shake":
+            if (boss.time >= stats.shakeFrames) {
+                if (monkey.onTree === boss.targetTree) {
+                    leaveTree(0, false);
+                    hurt();
+                }
+                nextBossPhase();
+                return;
+            }
+            break;
+
+        case "hop":
+            if (boss.airborne) {
+                boss.vy += BOSS_HOP_GRAVITY;
+                boss.x += boss.vx;
+                boss.y += boss.vy;
+                if (boss.y >= BOSS_Y) {
+                    boss.y = BOSS_Y;
+                    boss.airborne = false;
+                    boss.time = 0;
+                    boss.hopsLeft -= 1;
+                    shake = 4;
+                    dust(bossCenter(), groundY, 10);
+                    if (stats.shockwave && boss.hopsLeft === 0) groundPound();
+                }
+            } else if (boss.time >= BOSS_HOP_PAUSE) {
+                if (boss.hopsLeft > 0) {
+                    startBossHop();
+                } else {
+                    boss.state = "tired";
+                    boss.time = 0;
+                }
+            }
+            break;
+
+        case "tired":
+            // Efter hoppene puster bossen ud og kan hoppes på uden fare.
+            if (boss.time >= stats.tiredFrames) {
+                nextBossPhase();
+            }
+            return;
+
+        case "walk":
+            boss.x += boss.dir * stats.speed;
+            if (boss.x >= patrolMax()) boss.dir = -1;
+            if (boss.x <= patrolMin() && boss.dir < 0) boss.dir = 1;
+            if (--boss.throwTimer <= 0) {
+                boss.throwTimer = stats.throwEvery;
+                bossThrow();
+            }
+            if (--boss.walkTimer <= 0) {
+                nextBossPhase();
+                return;
+            }
+            break;
+
+        case "windup":
+            if (boss.time >= (boss.windupOverride || stats.windupFrames)) {
+                startCharge();
+            }
+            break;
+
+        case "charge":
+            boss.x += boss.dir * stats.chargeSpeed;
+            if (boss.time % 3 === 0) dust(bossCenter(), groundY, 2);
+            if (boss.x <= 8 || boss.x >= viewW - BOSS_SIZE - 8) {
+                boss.x = clamp(boss.x, 8, viewW - BOSS_SIZE - 8);
+                shake = 5;
+                endChargeRun();
+            }
+            break;
+
+        case "slip":
+            boss.x = clamp(boss.x + boss.slide, 8, viewW - BOSS_SIZE - 8);
+            boss.slide *= 0.94;
+            boss.spin += (1.45 - boss.spin) * 0.2;
+            if (boss.time >= 35) {
+                boss.state = "stun";
+                boss.time = 0;
+            }
+            return;
+
+        case "stun":
+            if (boss.time >= stats.stunFrames) {
+                boss.state = "recover";
+                boss.time = 0;
+            }
+            return;
+
+        case "recover":
+            boss.spin += (0 - boss.spin) * 0.18;
+            if (boss.time >= 40) {
+                boss.throwTimer = Math.min(boss.throwTimer, 40);
+                if (stats.shockwave) groundPound();
+                nextBossPhase();
+            }
+            return;
+    }
+
+    // Bossen gør kun skade, når den stormer eller er i luften.
+    const dangerous = boss.state === "charge" || (boss.state === "hop" && boss.airborne);
+    if (dangerous && overlaps(monkeyBox(), bossBox())) {
+        hurt();
+    }
+}
+
+function groundPound() {
+    shake = 8;
+    for (const dir of [-1, 1]) {
+        shots.push({ kind: "wave", x: bossCenter(), y: SHOT_GROUND_Y, vx: dir * (4 + level * 0.3), vy: 0, rolling: true, rot: 0 });
+    }
+}
+
+function bossThrow() {
+    const { stats } = boss;
+    const bananasAround = ammo + peels.length + groundBananas.length + shots.filter((s) => s.kind === "banana").length;
+
+    // Der skal altid være noget at kaste med, så man aldrig sidder fast.
+    if (bananasAround === 0 || Math.random() < 0.3) {
+        launchShot("banana", clamp(monkey.x + rand(-120, 120), 24, viewW - 60));
+        return;
+    }
+    for (let i = 0; i < stats.coconuts; i++) {
+        launchShot("coconut", clamp(monkey.x + 20 + rand(-stats.throwSpread, stats.throwSpread) + i * 90, 20, viewW - 60));
+    }
+    if (stats.coconutRain && Math.random() < 0.5) {
+        shots.push({ kind: "coconut", x: monkey.x + 20, y: worldTop() - 30, vx: 0, vy: 2, rolling: false, rot: 0, targetX: monkey.x + 20 });
+    }
+}
+
+function launchShot(kind, targetX) {
+    const startX = bossCenter();
+    const startY = boss.y + 10;
+    const frames = boss.stats.flightFrames;
+    shots.push({
+        kind, x: startX, y: startY,
+        vx: (targetX - startX) / frames,
+        vy: (SHOT_GROUND_Y - startY - 0.5 * SHOT_GRAVITY * frames * frames) / frames,
+        rolling: false, rot: 0, targetX,
+    });
+}
+
+function updatePeels() {
+    peels = peels.filter((peel) => {
+        if (!peel.landed) {
+            peel.vy += PEEL_GRAVITY;
+            peel.x += peel.vx;
+            peel.y += peel.vy;
+            peel.rot += 0.3;
+            if (peel.y >= PEEL_GROUND_Y) {
+                peel.y = PEEL_GROUND_Y;
+                peel.landed = true;
+                peel.rot = 0;
+            }
+            return true;
+        }
+
+        if (--peel.life <= 0) return false;
+        if (Math.abs(peel.x - bossCenter()) > 30) return true;
+
+        if (boss.state === "charge") {
+            slipBoss();
+            return false;
+        }
+        if (boss.state === "walk" || boss.state === "windup") {
+            // Når bossen går roligt, ser den skrællen og sparker den væk.
+            addEffect("😤", bossCenter(), boss.y - 12, 34);
+            dust(peel.x, peel.y, 6, "#facc15");
+            return false;
+        }
+        return true;
+    });
+}
+
+function slipBoss() {
+    boss.state = "slip";
+    boss.time = 0;
+    boss.spin = 0;
+    boss.spinDir = -boss.dir || 1;
+    boss.slide = boss.dir * 7;
+    shake = 8;
+    score += 10;
+    dust(bossCenter(), groundY, 12, "#facc15");
+}
+
+function stompBoss() {
+    boss.hp -= 1;
+    boss.y = BOSS_Y;
+    boss.airborne = false;
+    monkey.velocity = STOMP_BOUNCE;
+    monkey.isGrounded = false;
+    monkey.fromTree = false;
+    shake = 10;
+    score += 15;
+    addEffect("💫", bossCenter(), boss.y + 10, 40);
+    dust(bossCenter(), boss.y + 40, 14, "#ffffff");
+
+    if (boss.hp > 0) {
+        boss.state = "recover";
+        boss.time = 0;
+        return;
+    }
+    boss.state = "defeated";
+    boss.time = 0;
+    boss.fall = 0;
+    score += 25 * level;
+    shots = [];
+    peels = [];
+    groundBananas = [];
+    banner = { title: "Besejret!", subtitle: `+${25 * level} point`, time: 90 };
+}
+
+function updateShots() {
+    shots = shots.filter((shot) => {
+        shot.rot += 0.2;
+        if (shot.rolling) {
+            shot.x += shot.vx;
+            if (shot.kind === "wave" && frameCount % 3 === 0) dust(shot.x, groundY, 2, "#d6b98c");
+        } else {
+            shot.vy = Math.min(shot.vy + SHOT_GRAVITY, shot.vx === 0 ? SHOT_MAX_FALL : Infinity);
+            shot.x += shot.vx;
+            shot.y += shot.vy;
+            if (shot.y >= SHOT_GROUND_Y) {
+                shot.y = SHOT_GROUND_Y;
+                if (shot.kind === "banana") {
+                    groundBananas.push({ x: shot.x - 13, y: SHOT_GROUND_Y - 13, width: 26, height: 26, life: GROUND_BANANA_LIFE });
+                    return false;
+                }
+                if (!boss.stats.rollingCoconuts) {
+                    dust(shot.x, groundY, 8, "#a16207");
+                    return false;
+                }
+                shot.rolling = true;
+                shot.vx = (monkey.x + 20 < shot.x ? -1 : 1) * (3.5 + level * 0.35);
+            }
+        }
+
+        if (overlaps(monkeyBox(), shotBox(shot))) {
+            if (shot.kind === "banana") {
+                ammo = Math.min(MAX_AMMO, ammo + 1);
+                return false;
+            }
+            hurt();
+            return shot.kind === "wave";
+        }
+        return shot.x > -40 && shot.x < viewW + 40;
+    });
+}
+
+function updateGroundBananas() {
+    groundBananas = groundBananas.filter((banana) => {
+        if (overlaps(monkeyBox(), banana)) {
+            ammo = Math.min(MAX_AMMO, ammo + 1);
+            return false;
+        }
+        return --banana.life > 0;
+    });
+}
+
+/* ---------- Visning ---------- */
+
+function setText(id, value) {
+    const element = document.getElementById(id);
+    if (element.textContent !== value) {
+        element.textContent = value;
+    }
+}
+
+function updateUi() {
+    setText("levelChip", `Level ${level}`);
+    setText("livesChip", "❤️".repeat(Math.max(0, lives)) || "–");
+    setText("ammoChip", `🍌 ${ammo}`);
+    setText("scoreChip", String(score));
+    document.body.className = `mode-${mode === "paused" ? resumeMode : mode}`;
+    document.getElementById("pause").hidden = mode !== "run" && mode !== "boss";
+    document.getElementById("btnThrow").classList.toggle("call", !!boss && boss.state === "windup" && ammo > 0 && peels.length === 0);
+    const jumpNow = !!boss && (boss.state === "stun" || boss.state === "tired" || (monkey.onTree >= 0 && boss.state === "shake"));
+    document.getElementById("btnJump").classList.toggle("call", jumpNow);
+}
+
+function drawEmoji(icon, centerX, centerY, size, rotation = 0, flip = false) {
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(rotation);
+    if (flip) ctx.scale(-1, 1);
+    ctx.font = `${size}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#000";
+    ctx.fillText(icon, 0, 0);
+    ctx.restore();
+}
+
+function ellipse(x, y, radiusX, radiusY, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(x, y, radiusX, radiusY, 0, 0, TAU);
+    ctx.fill();
+}
+
+// Faste stjerner, så de ikke blinker tilfældigt.
+const STARS = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random() * 0.8, size: 1 + Math.random() * 1.6 }));
+
+function drawSky() {
+    const colors = theme();
+    const horizon = groundScreenY();
+    const gradient = ctx.createLinearGradient(0, 0, 0, horizon);
+    gradient.addColorStop(0, colors.sky[0]);
+    gradient.addColorStop(1, colors.sky[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, viewW, horizon + 4);
+
+    if (colors.stars) {
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        for (const star of STARS) {
+            ctx.fillRect(star.x * viewW, star.y * horizon, star.size, star.size);
+        }
+    }
+
+    const sunX = viewW * 0.72;
+    const sunY = Math.max(90, horizon * 0.32);
+    const glow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 130);
+    glow.addColorStop(0, `${colors.sun}cc`);
+    glow.addColorStop(1, `${colors.sun}00`);
+    ctx.fillStyle = glow;
+    ctx.fillRect(sunX - 130, sunY - 130, 260, 260);
+    ellipse(sunX, sunY, 36, 36, colors.sun);
+}
+
+function drawLayers() {
+    for (const layer of layers) {
+        const offset = -((scroll * layer.speed) % LAYER_WIDTH);
+        ctx.drawImage(layer.canvas, offset, 0, LAYER_WIDTH, groundY + 10);
+        if (offset + LAYER_WIDTH < viewW) {
+            ctx.drawImage(layer.canvas, offset + LAYER_WIDTH, 0, LAYER_WIDTH, groundY + 10);
+        }
+    }
+}
+
+function drawGround() {
+    const colors = theme();
+    const bottom = groundY + bottomPad + 30;
+    ctx.fillStyle = colors.soil;
+    ctx.fillRect(-20, groundY, viewW + 40, bottom - groundY);
+    ctx.fillStyle = colors.grass;
+    ctx.fillRect(-20, groundY, viewW + 40, 16);
+
+    ctx.fillStyle = colors.blade;
+    const bladeOffset = -(scroll % 26);
+    for (let x = bladeOffset; x < viewW; x += 26) {
+        ctx.beginPath();
+        ctx.moveTo(x, groundY + 16);
+        ctx.lineTo(x + 7, groundY + 24);
+        ctx.lineTo(x + 14, groundY + 16);
+        ctx.fill();
+    }
+
+    ctx.fillStyle = colors.soilDark;
+    const stoneOffset = -(scroll % 160);
+    for (let x = stoneOffset; x < viewW + 160; x += 160) {
+        for (let row = 0; row < 6; row++) {
+            const y = groundY + 40 + row * 52;
+            if (y > bottom) break;
+            ctx.beginPath();
+            ctx.ellipse(x + (row % 2) * 76, y, 24 - row, 7, 0, 0, TAU);
+            ctx.fill();
+        }
+    }
+}
+
+function drawPit(hole) {
+    const colors = theme();
+    ctx.fillStyle = "#1c1208";
+    ctx.beginPath();
+    ctx.roundRect(hole.x, groundY - 1, hole.width, 58, [0, 0, 12, 12]);
+    ctx.fill();
+    ctx.fillStyle = colors.grass;
+    ctx.fillRect(hole.x - 5, groundY, 6, 14);
+    ctx.fillRect(hole.x + hole.width - 1, groundY, 6, 14);
+
+    // Spidse pæle i bunden af abefælden.
+    ctx.fillStyle = "#c9a26b";
+    for (let x = hole.x + 8; x < hole.x + hole.width - 10; x += 16) {
+        ctx.beginPath();
+        ctx.moveTo(x, groundY + 54);
+        ctx.lineTo(x + 6, groundY + 20);
+        ctx.lineTo(x + 12, groundY + 54);
+        ctx.fill();
+    }
+}
+
+function drawRock(rock) {
+    const { x, y, width, height } = rock;
+    ctx.fillStyle = "#7c8493";
+    ctx.beginPath();
+    ctx.moveTo(x, groundY + 2);
+    ctx.lineTo(x + width * 0.12, y + height * 0.4);
+    ctx.lineTo(x + width * (0.3 + rock.shape * 0.15), y);
+    ctx.lineTo(x + width * 0.75, y + height * 0.14);
+    ctx.lineTo(x + width, y + height * 0.62);
+    ctx.lineTo(x + width, groundY + 2);
+    ctx.fill();
+    ctx.fillStyle = "#a4abb8";
+    ctx.beginPath();
+    ctx.moveTo(x + width * 0.14, y + height * 0.42);
+    ctx.lineTo(x + width * (0.3 + rock.shape * 0.15), y + 2);
+    ctx.lineTo(x + width * 0.55, y + height * 0.45);
+    ctx.fill();
+}
+
+function drawSnake(snake) {
+    const centerX = snake.x + snake.width / 2;
+    const trunkX = snake.x + snake.width + 42;
+
+    // Træet, som slangen hænger fra.
+    ctx.fillStyle = "#6b4226";
+    ctx.fillRect(trunkX, BRANCH_Y - 6, 24, groundY - BRANCH_Y + 8);
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#6b4226";
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(trunkX + 8, BRANCH_Y + 2);
+    ctx.lineTo(centerX - 16, BRANCH_Y);
+    ctx.stroke();
+    ellipse(trunkX + 8, BRANCH_Y - 30, 70, 38, "#1e8a4c");
+    ellipse(trunkX - 42, BRANCH_Y - 24, 48, 28, "#23a05a");
+    ellipse(trunkX + 58, BRANCH_Y - 20, 44, 26, "#187a42");
+
+    const headY = SNAKE_BOTTOM_Y - 13;
+    ctx.strokeStyle = "#16a34a";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(centerX, BRANCH_Y);
+    for (let y = BRANCH_Y; y <= headY; y += 6) {
+        ctx.lineTo(centerX + Math.sin(y * 0.07 + frameCount * 0.12) * 7, y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 4;
+    ctx.setLineDash([6, 14]);
+    ctx.beginPath();
+    ctx.moveTo(centerX, BRANCH_Y);
+    for (let y = BRANCH_Y; y <= headY; y += 6) {
+        ctx.lineTo(centerX + Math.sin(y * 0.07 + frameCount * 0.12) * 7, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const headX = centerX + Math.sin(headY * 0.07 + frameCount * 0.12) * 7;
+    ellipse(headX, headY, 13, 13, "#15803d");
+    ellipse(headX - 5, headY - 3, 3.5, 3.5, "#fff");
+    ellipse(headX + 5, headY - 3, 3.5, 3.5, "#fff");
+    ellipse(headX - 5, headY - 3, 1.7, 1.7, "#111");
+    ellipse(headX + 5, headY - 3, 1.7, 1.7, "#111");
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(headX, headY + 11);
+    ctx.lineTo(headX, headY + 18 + Math.sin(frameCount * 0.4) * 2);
+    ctx.stroke();
+}
+
+function drawPeel(peel) {
+    ctx.save();
+    ctx.translate(peel.x, peel.y);
+    ctx.rotate(peel.rot);
+    ctx.fillStyle = "#facc15";
+    for (const angle of [-0.9, -0.3, 0.3, 0.9]) {
+        ctx.save();
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.ellipse(0, -9, 4.5, 11, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+    }
+    ctx.fillStyle = "#854d0e";
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawPrompt(text, x, y) {
+    ctx.font = "800 20px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const width = ctx.measureText(text).width + 24;
+    const left = clamp(x - width / 2, 6, viewW - width - 6);
+    const pulse = Math.floor(frameCount / 8) % 2 === 0;
+    ctx.fillStyle = pulse ? "#fde047" : "#ffffff";
+    ctx.beginPath();
+    ctx.roundRect(left, y - 16, width, 32, 16);
+    ctx.fill();
+    ctx.fillStyle = "#1f2937";
+    ctx.fillText(text, left + width / 2, y + 1);
+}
+
+function drawArenaTree(index) {
+    const x = treeX(index);
+    const shaking = !!boss && boss.state === "shake" && boss.targetTree === index;
+    const lean = shaking ? Math.sin(frameCount * 0.9) * 0.05 : 0;
+
+    ctx.save();
+    ctx.translate(x, groundY);
+    ctx.rotate(lean);
+    ctx.fillStyle = "#6b4226";
+    ctx.fillRect(-13, -196, 26, 198);
+    ctx.fillStyle = "#7f5230";
+    for (let y = -24; y > -150; y -= 26) {
+        ctx.fillRect(-13, y, 26, 5);
+    }
+    ctx.fillStyle = "#6b4226";
+    ctx.beginPath();
+    ctx.roundRect(-TREE_BRANCH_HALF - 6, -150, (TREE_BRANCH_HALF + 6) * 2, 12, 6);
+    ctx.fill();
+    ellipse(0, -218, 78, 44, "#1e8a4c");
+    ellipse(-52, -204, 46, 28, "#23a05a");
+    ellipse(52, -204, 46, 28, "#187a42");
+    ctx.restore();
+}
+
+function drawBoss() {
+    const shakeX = boss.state === "windup" || boss.state === "shake" ? rand(-3, 3) : 0;
+    const centerX = bossCenter() + shakeX;
+    const centerY = boss.y + BOSS_SIZE / 2;
+    const lying = boss.state === "slip" || boss.state === "stun" || boss.state === "recover";
+
+    if (boss.state === "hop" && boss.airborne) {
+        ellipse(boss.hopTarget, groundY + 4, 46, 9, "rgba(239,68,68,0.55)");
+    } else if (boss.state !== "defeated") {
+        ellipse(centerX, groundY + 4, 42, 7, "rgba(0,0,0,0.22)");
+    }
+    drawEmoji(boss.icon, centerX, centerY + (lying ? 12 : 0), BOSS_SIZE, boss.spin * boss.spinDir, boss.dir > 0);
+
+    if (boss.hat && !lying && boss.state !== "defeated") {
+        drawEmoji(boss.hat, centerX, boss.y + 2, 36);
+    }
+    if (boss.state === "stun") {
+        drawEmoji("💫", centerX, boss.y + 4, 34, boss.time * 0.2);
+        drawPrompt("HOP PÅ DEN!", centerX, boss.y - 22);
+    }
+    if (boss.state === "windup") {
+        drawPrompt(ammo > 0 && peels.length === 0 ? "KAST NU!" : "PAS PÅ!", centerX, boss.y - 22);
+    }
+    if (boss.state === "tired") {
+        drawEmoji("💦", centerX + 34, boss.y + 8 + Math.sin(boss.time * 0.3) * 4, 24);
+        drawPrompt("TRÆT! HOP PÅ DEN!", centerX, boss.y - 22);
+    }
+    if (boss.state === "shake" && monkey.onTree >= 0) {
+        drawPrompt("HOP NED!", clamp(monkey.x + 20, 60, viewW - 60), monkey.y - 26);
+    }
+}
+
+function drawArenaHints() {
+    if (monkey.onTree >= 0 || !monkey.isGrounded || boss.state === "enter" || level > 2) return;
+    const trunk = nearTrunk();
+    if (trunk >= 0) {
+        drawPrompt("Hop = klatre op", clamp(treeX(trunk), 90, viewW - 90), groundY - 92);
+    }
+}
+
+function drawBossBar() {
+    if (!boss || boss.state === "defeated") return;
+    const width = Math.min(300, viewW * 0.62);
+    const x = (viewW - width) / 2;
+    const y = 62;
+    ctx.fillStyle = "rgba(8,15,35,0.6)";
+    ctx.beginPath();
+    ctx.roundRect(x - 10, y - 8, width + 20, 44, 12);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "800 16px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(boss.name, viewW / 2, y + 6);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fillRect(x, y + 18, width, 9);
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(x, y + 18, width * (boss.hp / boss.stats.hp), 9);
+    ctx.fillStyle = "rgba(8,15,35,0.8)";
+    for (let i = 1; i < boss.stats.hp; i++) {
+        ctx.fillRect(x + (width * i) / boss.stats.hp - 1, y + 18, 2, 9);
+    }
+}
+
+function drawRunProgress() {
+    const width = Math.min(220, viewW * 0.42);
+    const x = (viewW - width) / 2 - 12;
+    const y = 66;
+    const progress = Math.min(1, passed / obstaclesBeforeBoss(level));
+    ctx.fillStyle = "rgba(8,15,35,0.5)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, 10, 5);
+    ctx.fill();
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.roundRect(x, y, Math.max(10, width * progress), 10, 5);
+    ctx.fill();
+    drawEmoji(BOSSES[(level - 1) % BOSSES.length].icon, x + width + 18, y + 5, 26);
+}
+
+function drawBanner() {
+    if (!banner) return;
+    const y = Math.max(140, groundScreenY() * 0.4);
+    ctx.globalAlpha = Math.min(1, banner.time / 20);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = "rgba(8,15,35,0.85)";
+    ctx.fillStyle = "#fde047";
+    ctx.font = "900 44px system-ui, Arial";
+    ctx.strokeText(banner.title, viewW / 2, y);
+    ctx.fillText(banner.title, viewW / 2, y);
+    if (banner.subtitle) {
+        ctx.lineWidth = 5;
+        ctx.fillStyle = "#fff";
+        ctx.font = `800 ${viewW < 560 ? 21 : 26}px system-ui, Arial`;
+        ctx.strokeText(banner.subtitle, viewW / 2, y + 34);
+        ctx.fillText(banner.subtitle, viewW / 2, y + 34);
+    }
+    ctx.globalAlpha = 1;
+}
+
+function drawMonkey() {
+    if (monkey.invulnerable > 0 && Math.floor(monkey.invulnerable / 6) % 2 === 1) return;
+    const feetX = monkey.x + 20;
+    if (mode !== "gameover") {
+        ellipse(feetX, groundY + 4, 22 - Math.min(14, (groundY - STAND_HEIGHT - monkey.y) * 0.1), 5, "rgba(0,0,0,0.22)");
+    }
+    const running = mode === "run" && monkey.isGrounded && !monkey.ducking;
+    const bob = running ? Math.abs(Math.sin(frameCount * 0.35)) * 4 : 0;
+    const scaleY = monkey.ducking ? 0.58 : 1 - monkey.squash * 0.035;
+    const scaleX = monkey.ducking ? 1.18 : 1 + monkey.squash * 0.03;
+    const tilt = monkey.isGrounded ? (running ? Math.sin(frameCount * 0.35) * 0.08 : 0) : clamp(monkey.velocity * 0.03, -0.3, 0.3);
+    const facingLeft = mode === "boss" && boss && bossCenter() < monkey.x + 20;
+
+    ctx.save();
+    ctx.translate(feetX, monkey.y + STAND_HEIGHT - bob);
+    ctx.scale(scaleX, scaleY);
+    drawEmoji("🐒", 0, -21, 44, tilt, !facingLeft);
+    ctx.restore();
+}
+
+function draw() {
+    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    drawSky();
+
+    const shakeX = shake > 0 ? rand(-shake, shake) * 0.6 : 0;
+    const shakeY = shake > 0 ? rand(-shake, shake) * 0.6 : 0;
+    ctx.translate(shakeX, cameraY() + shakeY);
+
+    for (const cloud of clouds) {
+        drawEmoji("☁️", cloud.x, cloud.y, cloud.size);
+    }
+    drawLayers();
+    drawGround();
+
+    for (const obstacle of obstacles) {
+        if (obstacle.type === "hole") drawPit(obstacle);
+    }
+    for (const obstacle of obstacles) {
+        if (obstacle.type === "rock") drawRock(obstacle);
+        if (obstacle.type === "snake") drawSnake(obstacle);
+    }
+    for (const pickup of pickups) {
+        const bobY = Math.sin(frameCount * 0.1 + pickup.x * 0.02) * 4;
+        drawEmoji(pickup.kind === "heart" ? "❤️" : "🍌", pickup.x + 13, pickup.y + 13 + bobY, 28);
+    }
+    for (const banana of groundBananas) {
+        // Blinker, når den snart forsvinder.
+        if (banana.life > 90 || Math.floor(banana.life / 8) % 2 === 0) {
+            drawEmoji("🍌", banana.x + 13, banana.y + 13, 28);
+        }
+    }
+    if (boss) TREE_FRACTIONS.forEach((_, index) => drawArenaTree(index));
+    peels.forEach(drawPeel);
+    if (boss) drawBoss();
+    for (const shot of shots) {
+        // Skygge på jorden, der viser, hvor kokosnødden lander.
+        if (shot.kind === "coconut" && !shot.rolling) {
+            ellipse(shot.targetX, groundY + 4, 22, 6, "rgba(239,68,68,0.55)");
+        }
+        if (shot.kind === "wave") {
+            drawEmoji("💨", shot.x, shot.y - 4, 34, 0, shot.vx > 0);
+        } else {
+            drawEmoji(shot.kind === "banana" ? "🍌" : "🥥", shot.x, shot.y, 28, shot.rot);
+        }
+    }
+
+    if (mode !== "menu") drawMonkey();
+    if (mode === "boss" && boss) drawArenaHints();
+
+    for (const particle of particles) {
+        ctx.globalAlpha = Math.min(1, particle.life / 12);
+        ctx.fillStyle = particle.color;
+        ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
+    }
+    ctx.globalAlpha = 1;
+
+    if (level === 1 && mode === "run") {
+        for (const obstacle of obstacles) {
+            if (obstacle.x > monkey.x + 30) {
+                const label = obstacle.type === "snake" ? "Buk dig!" : "Hop!";
+                drawPrompt(label, obstacle.x + obstacle.width / 2, obstacle.type === "snake" ? BRANCH_Y + 96 : groundY - 92);
+            }
+        }
+    }
+    for (const effect of effects) {
+        drawEmoji(effect.icon, effect.x, effect.y, effect.size);
+    }
+
+    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    if (mode === "run") drawRunProgress();
+    if (mode === "boss") drawBossBar();
+    drawBanner();
+}
+
+// Spillet flytter alt én gang pr. billede, så det må højst køre 60 gange i sekundet,
+// ellers kører det dobbelt så hurtigt på telefoner med 120 Hz-skærm.
+let lastStep = 0;
+
+function loop(now) {
+    if (now - lastStep >= 1000 / 61) {
+        lastStep = now;
+        if (mode !== "paused") step();
+        draw();
+    }
+    requestAnimationFrame(loop);
+}
+
+resize();
+makeClouds();
+monkey.x = runX();
+showOverlay({
+    title: "Monkey Timer 2",
+    body: "Spring gennem junglen og slå bosserne.",
+    button: "Start",
+    action: () => startGame(),
+    howto: true,
+});
+updateUi();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
